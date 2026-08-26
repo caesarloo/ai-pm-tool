@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Generate artifact attestations
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/main.js, dist/manifest.json, dist/styles.css
+
+      - name: Create Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          NOTES_FILE="RELEASE_v${VERSION}.md"
+
+          if [ ! -f "$NOTES_FILE" ]; then
+            echo "Missing: $NOTES_FILE"
+            exit 1
+          fi
+
+          gh release create "$VERSION" \
+            dist/main.js dist/manifest.json dist/styles.css \
+            --title "AI PM Tool v${VERSION}" \
+            --notes-file "$NOTES_FILE" || {
+            echo "Release already exists, updating assets..."
+            gh release upload "$VERSION" dist/main.js dist/manifest.json dist/styles.css --clobber
+          }

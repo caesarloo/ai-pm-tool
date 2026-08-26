@@ -1,0 +1,1089 @@
+/* AI PM Tool · 项目总览侧边栏样式 */
+
+.ai-pm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.ai-pm-header-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+.ai-pm-header-count {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.ai-pm-search {
+  margin: 6px 12px 0;
+  padding: 4px 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  font-size: 12px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  width: calc(100% - 24px);
+}
+
+/* 组合筛选行（§4.3）：项目状态 / 需求状态 两行独立，AND 组合 */
+.ai-pm-dim-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 4px 12px 0;
+}
+.ai-pm-dim-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  padding-top: 4px;
+  width: 26px;
+  text-align: right;
+}
+.ai-pm-dim-row .ai-pm-tabs {
+  flex: 1;
+  padding: 0;
+}
+
+/* 统计与筛选合并（§4.3）：一行按钮 = 计数 + 状态色圆点 */
+.ai-pm-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 6px 12px 4px;
+}
+.ai-pm-tab {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  text-align: center;
+  font-size: 11px;
+  padding: 3px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+.ai-pm-tab .ai-pm-dot {
+  width: 7px;
+  height: 7px;
+}
+.ai-pm-tab.active {
+  color: var(--text-accent);
+  border-bottom-color: var(--text-accent);
+  font-weight: 600;
+}
+
+.ai-pm-list {
+  padding: 6px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+}
+.ai-pm-card {
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.ai-pm-card:hover {
+  border-color: var(--text-accent);
+}
+.ai-pm-card-row1 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ai-pm-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.ai-pm-dot.green { background: #4caf50; }
+.ai-pm-dot.amber { background: #ff9800; }
+.ai-pm-dot.red { background: #e53935; }
+.ai-pm-dot.gray { background: #9e9e9e; }
+.ai-pm-dot.blue { background: #2196f3; }
+.ai-pm-dot.slate { background: #78909c; }
+.ai-pm-card-name {
+  font-size: 12px;
+  font-weight: 600;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 卡片文件名链接：保持正文外观，hover 显示可点 */
+a.ai-pm-card-name {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+a.ai-pm-card-name:hover {
+  color: var(--text-accent);
+  text-decoration: underline;
+}
+/* 进展弹窗需求名称链接：默认超链接样式（accent 色 + 下划线），一眼可辨可点击打开笔记 */
+a.ai-pm-pick-name {
+  color: var(--text-accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+a.ai-pm-pick-name:hover {
+  color: var(--text-accent-hover);
+  text-decoration: underline;
+}
+.ai-pm-mine {
+  color: var(--text-accent);
+  font-size: 10px;
+  border: 1px solid var(--text-accent);
+  border-radius: 4px;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+.ai-pm-card-row2 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.ai-pm-card-due.overdue {
+  color: #e53935;
+  font-weight: 600;
+}
+.ai-pm-badges {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+.ai-pm-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--background-modifier-border);
+  color: var(--text-muted);
+}
+.ai-pm-badge.done {
+  background: #e8f5e9;
+  border-color: #c8e6c9;
+  color: #2e7d32;
+}
+
+.ai-pm-footer {
+  padding: 8px 12px;
+  border-top: 2px solid var(--background-modifier-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--background-secondary);
+}
+.ai-pm-sync-btn {
+  border: none;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.ai-pm-sync-btn:hover {
+  opacity: 0.9;
+}
+
+/* ===== 变更记录（§4.4：默认折叠、可关闭） ===== */
+.ai-pm-changelog {
+  border-top: 2px solid var(--interactive-accent);
+  background: var(--background-primary);
+}
+.ai-pm-chg-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 12px;
+  background: var(--background-secondary);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.ai-pm-chg-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+.ai-pm-chg-ops {
+  display: flex;
+  gap: 4px;
+}
+.ai-pm-chg-btn {
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 7px;
+  border-radius: 5px;
+}
+.ai-pm-chg-btn:hover {
+  color: var(--text-normal);
+}
+.ai-pm-chg-body {
+  padding: 6px 10px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.ai-pm-chg {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 7px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+}
+.ai-pm-chg-file {
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+.ai-pm-chg-row {
+  display: grid;
+  grid-template-columns: 60px 1fr 1fr;
+  gap: 4px;
+  font-size: 10.5px;
+  align-items: center;
+}
+.ai-pm-chg-field {
+  color: var(--text-muted);
+}
+.ai-pm-chg-base {
+  background: var(--background-secondary);
+  border-radius: 4px;
+  padding: 2px 5px;
+  color: var(--text-muted);
+  text-decoration: line-through;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-pm-chg-work {
+  background: var(--background-secondary);
+  border-radius: 4px;
+  padding: 2px 5px;
+  color: #4caf50;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-pm-chg-commit {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+.ai-pm-muted {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.ai-pm-diff-hint {
+  margin-top: 6px;
+}
+
+/* ===== 空目录提示（需求笔记目录未配置） ===== */
+.ai-pm-empty-hint {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--text-muted);
+}
+.ai-pm-empty-hint-title {
+  display: block;
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-semibold);
+  color: var(--text-warning);
+  margin-bottom: 10px;
+}
+.ai-pm-empty-hint p {
+  margin: 0 0 14px;
+  line-height: 1.6;
+}
+.ai-pm-seed-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ===== 进展更新弹窗（原型 05） ===== */
+.ai-pm-progress .ai-pm-pick {
+  margin-bottom: 10px;
+}
+.ai-pm-progress .ai-pm-pick-name {
+  font-size: 13px;
+  font-weight: 600;
+  word-break: break-all;
+}
+.ai-pm-progress .ai-pm-pick-cur {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.ai-pm-progress .ai-pm-stages {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+}
+.ai-pm-progress .ai-pm-stages-t {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+.ai-pm-progress .ai-pm-tl {
+  position: relative;
+  padding-left: 18px;
+}
+.ai-pm-progress .ai-pm-tl::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: var(--background-modifier-border);
+}
+.ai-pm-progress .ai-pm-st {
+  position: relative;
+  padding: 4px 0 4px 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.ai-pm-progress .ai-pm-st::before {
+  content: "";
+  position: absolute;
+  left: -17px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--background-modifier-border);
+  border: 2px solid var(--background-primary);
+}
+.ai-pm-progress .ai-pm-st.done::before {
+  background: #4caf50;
+}
+.ai-pm-progress .ai-pm-st.current::before {
+  background: var(--interactive-accent);
+  box-shadow: 0 0 0 3px rgba(112, 83, 214, 0.2);
+}
+.ai-pm-progress .ai-pm-st-nm {
+  flex: 1;
+}
+.ai-pm-progress .ai-pm-st.done .ai-pm-st-nm {
+  color: var(--text-muted);
+}
+.ai-pm-progress .ai-pm-st.current .ai-pm-st-nm {
+  font-weight: 700;
+  color: var(--text-accent);
+}
+.ai-pm-progress .ai-pm-st-opt {
+  font-size: 10px;
+  color: #ff9800;
+  border: 1px solid #ffb74d;
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.ai-pm-progress .ai-pm-st-date {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.ai-pm-progress .ai-pm-st-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  cursor: pointer;
+}
+/* 进展说明文本框加宽：占满弹窗整行，纵向可拖拽 */
+.ai-pm-progress .ai-pm-progress-ta-row {
+  flex-wrap: wrap;
+}
+.ai-pm-progress .ai-pm-progress-ta-row .setting-item-info {
+  width: 100%;
+  flex: 0 0 100%;
+}
+.ai-pm-progress .ai-pm-progress-ta-row .setting-item-control {
+  width: 100%;
+  flex: 1 1 100%;
+  margin-left: 0;
+}
+.ai-pm-progress .ai-pm-progress-ta {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  box-sizing: border-box;
+  font-size: 13px;
+  line-height: 1.7;
+}
+/* 日期选择控件（需求评审/开发投入/计划上线）：对齐与宽度 */
+.ai-pm-progress .setting-item input[type="date"] {
+  min-width: 150px;
+  font-size: 12.5px;
+}
+/* 其他字段（frontmatter 只读展示：A类已解析 / B类 raw） */
+.ai-pm-progress .ai-pm-extra-box {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  font-size: 11px;
+  background: var(--background-secondary);
+}
+.ai-pm-progress .ai-pm-extra-t {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.ai-pm-progress .ai-pm-extra-box table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.ai-pm-progress .ai-pm-extra-box td {
+  padding: 2px 4px;
+  font-size: 11px;
+  vertical-align: top;
+}
+.ai-pm-progress .ai-pm-extra-k {
+  color: var(--text-muted);
+  white-space: nowrap;
+  width: 90px;
+}
+.ai-pm-progress .ai-pm-extra-v {
+  word-break: break-all;
+}
+.ai-pm-preview {
+  border: 1px dashed var(--interactive-accent);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin: 8px 0;
+  font-size: 12px;
+}
+.ai-pm-preview-t {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.ai-pm-preview-row {
+  margin: 3px 0;
+}
+.ai-pm-preview-old {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+.ai-pm-preview-new {
+  color: #4caf50;
+  font-weight: 600;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+/* 变更预览 · SVN 未提交变更（svn diff 真实结果） */
+.ai-pm-diff-box {
+  margin-top: 8px;
+  border-top: 1px dashed var(--background-modifier-border);
+  padding-top: 6px;
+}
+.ai-pm-diff-t {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+.ai-pm-diff-line {
+  font-family: var(--font-monospace);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ai-pm-diff-line.added {
+  color: #2e7d32;
+}
+.ai-pm-diff-line.deleted {
+  color: #c62828;
+  text-decoration: line-through;
+}
+.ai-pm-diff-line.unchanged {
+  color: var(--text-muted);
+}
+.ai-pm-diff-sep {
+  border-top: 1px dashed var(--background-modifier-border);
+  margin: 6px 0;
+}
+.ai-pm-progress .ai-pm-modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+.ai-pm-progress .ai-pm-btn {
+  font-size: 12px;
+  padding: 5px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  cursor: pointer;
+}
+.ai-pm-progress .ai-pm-btn.primary {
+  /* 紫色背景 + 白色文字（!important 压过 Obsidian .modal button 默认样式） */
+  background: #7c3aed !important;
+  color: #fff !important;
+  border-color: #7c3aed !important;
+}
+.ai-pm-progress .ai-pm-btn.primary:hover {
+  background: #6d28d9 !important;
+  border-color: #6d28d9 !important;
+}
+.ai-pm-progress .ai-pm-btn.ghost {
+  color: var(--text-muted);
+}
+
+/* ===== 设置页：模型 provider 列表（§5 单选启用） ===== */
+.ai-pm-provider-list {
+  margin-bottom: 8px;
+}
+.ai-pm-provider {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+}
+.ai-pm-provider.active {
+  border-color: var(--interactive-accent);
+  background: color-mix(in srgb, var(--interactive-accent) 8%, transparent);
+}
+.ai-pm-provider-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.ai-pm-provider input[type="radio"] {
+  margin-right: 2px;
+  vertical-align: middle;
+}
+.ai-pm-provider-name {
+  font-weight: 600;
+  font-size: 12px;
+  vertical-align: middle;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-pm-provider-del {
+  border: 1px solid var(--background-modifier-border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 4px;
+  width: 22px;
+  height: 22px;
+  line-height: 1;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ai-pm-provider-del:hover {
+  color: var(--text-error);
+  border-color: var(--text-error);
+}
+/* 四个参数分四行：行内输入框宽度适当放宽 */
+.ai-pm-provider .setting-item {
+  border-top: none;
+  padding: 4px 0;
+}
+.ai-pm-provider .setting-item-control input {
+  min-width: 320px;
+}
+
+/* ===== 宽弹窗（进展/节点邮件：Modal 非侧边栏，放宽） ===== */
+.modal.ai-pm-modal-wide {
+  width: min(760px, 94vw);
+  max-width: 94vw;
+}
+.ai-pm-modal-wide .modal-content {
+  max-height: 82vh;
+  overflow-y: auto;
+}
+
+/* ===== 节点邮件弹窗（§4.6 · 原型 03） ===== */
+.ai-pm-mail-err-line {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.ai-pm-mail-tab {
+  padding: 12px 16px;
+}
+.ai-pm-mail-tab.is-hidden {
+  display: none;
+}
+/* 生成中 */
+.ai-pm-mail-gen {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 30px 10px;
+}
+.ai-pm-mail-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--background-modifier-border);
+  border-top-color: var(--interactive-accent);
+  border-radius: 50%;
+  margin: 0 auto 14px;
+  animation: ai-pm-spin 1s linear infinite;
+}
+@keyframes ai-pm-spin {
+  to { transform: rotate(360deg); }
+}
+.ai-pm-mail-gen-tags {
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+/* 预览确认 */
+.ai-pm-mail-body .ai-pm-mail-field {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  align-items: flex-start;
+}
+.ai-pm-mail-lb {
+  width: 56px;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding-top: 6px;
+  flex-shrink: 0;
+}
+.ai-pm-mail-val {
+  flex: 1;
+  font-size: 12.5px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  padding: 5px 9px;
+  background: var(--background-secondary);
+}
+.ai-pm-mail-chipbox {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.ai-pm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+  color: var(--text-accent);
+  font-size: 11px;
+  border-radius: 10px;
+  padding: 2px 8px;
+  max-width: 100%;
+}
+.ai-pm-chip-x {
+  /* 透明底、无边框、无圆角阴影（!important 压过 Obsidian .modal button 白底样式） */
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 1px;
+  font-size: 10px;
+  line-height: 1;
+  border-radius: 0;
+}
+.ai-pm-chip-x:hover {
+  color: var(--text-error);
+}
+/* 未匹配到邮箱的收件人：红色警示样式，点击补充邮箱 */
+.ai-pm-chip.invalid {
+  background: color-mix(in srgb, var(--text-error) 12%, transparent);
+  color: var(--text-error);
+  border: 1px dashed var(--text-error);
+}
+.ai-pm-chip.invalid.clickable {
+  cursor: pointer;
+}
+.ai-pm-chip.invalid.clickable:hover {
+  background: color-mix(in srgb, var(--text-error) 20%, transparent);
+}
+.ai-pm-mail-chip-input {
+  flex: 1 1 160px;
+  min-width: 140px;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-normal);
+  outline: none;
+  padding: 2px 0;
+}
+.ai-pm-mail-btn.small.chip-add {
+  margin-top: 0;
+  flex-shrink: 0;
+}
+.ai-pm-mail-input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: var(--text-normal);
+  outline: none;
+}
+.ai-pm-mail-ta {
+  width: 100%;
+  border: none;
+  background: transparent;
+  font: inherit;
+  resize: vertical;
+  outline: none;
+  line-height: 1.7;
+  color: var(--text-normal);
+}
+/* 正文预览（所见即所得编辑，无切换按钮） */
+.ai-pm-mail-body-preview {
+  max-height: 300px;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-normal);
+}
+.ai-pm-mail-body-preview[contenteditable="true"] {
+  cursor: text;
+  border-radius: 4px;
+}
+.ai-pm-mail-body-preview:focus {
+  outline: 1px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+.ai-pm-mail-body-preview p {
+  margin: 4px 0;
+}
+.ai-pm-mail-body-preview h1,
+.ai-pm-mail-body-preview h2,
+.ai-pm-mail-body-preview h3,
+.ai-pm-mail-body-preview h4 {
+  margin: 10px 0 4px;
+}
+.ai-pm-mail-body-preview ul,
+.ai-pm-mail-body-preview ol {
+  margin: 4px 0;
+  padding-left: 22px;
+}
+.ai-pm-mail-body-preview li {
+  margin: 2px 0;
+}
+.ai-pm-mail-body-preview table {
+  border-collapse: collapse;
+  margin: 6px 0;
+  width: 100%;
+}
+.ai-pm-mail-body-preview th,
+.ai-pm-mail-body-preview td {
+  border: 1px solid var(--background-modifier-border);
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.ai-pm-mail-body-preview th {
+  background: var(--background-secondary);
+}
+/* 表格显示加固：覆盖 Obsidian 阅读视图样式（display:block/max-content 等），保证预览编辑中表格正常 */
+.ai-pm-mail-body-preview.markdown-rendered table {
+  display: table !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  border-collapse: collapse !important;
+  margin: 8px 0 !important;
+  table-layout: auto;
+}
+.ai-pm-mail-body-preview.markdown-rendered th,
+.ai-pm-mail-body-preview.markdown-rendered td {
+  border: 1px solid var(--background-modifier-border) !important;
+  padding: 4px 8px !important;
+  vertical-align: top;
+  white-space: normal;
+}
+.ai-pm-mail-body-preview.markdown-rendered th {
+  background: var(--background-secondary) !important;
+  font-weight: 600;
+}
+.ai-pm-mail-body-preview.markdown-rendered .table-wrapper {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.ai-pm-mail-att {
+  border: 1px dashed var(--background-modifier-border-hover);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.ai-pm-mail-att-t {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.ai-pm-mail-att-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  margin-bottom: 4px;
+}
+.ai-pm-mail-att-nm {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-pm-mail-att-src {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.ai-pm-mail-att-act {
+  display: flex;
+  gap: 4px;
+}
+.ai-pm-mail-att-btn {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.ai-pm-mail-att-btn:hover {
+  color: var(--text-normal);
+}
+/* 重新生成（状态行 + 文本框 + 右下角紫色圆形按钮，整块浅灰底色卡片） */
+.ai-pm-mail-regen {
+  position: relative;
+  padding: 8px 16px;
+  margin-bottom: 10px;
+  background: var(--background-secondary);
+  border-radius: 8px;
+}
+.ai-pm-mail-regen-ta {
+  width: 100%;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  padding: 8px 42px 8px 10px; /* 右留白 42px：为 ↑ 圆形按钮预留 */
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  resize: vertical;
+  min-height: 44px;
+  outline: none;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  box-sizing: border-box;
+  margin: 0; /* 清除浏览器/主题默认 margin，保证容器高度 = 文本框高度 */
+  display: block;
+}
+.ai-pm-mail-regen-ta:focus {
+  border-color: var(--interactive-accent);
+}
+/* 重新生成区：状态行（左侧文案 + 右侧模型下拉）+ 文本框右下角 ↑ 圆形按钮 */
+.ai-pm-mail-regen-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  min-height: 20px;
+  margin-bottom: 6px;
+}
+.ai-pm-mail-regen-text {
+  flex: 1;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+/* 累计用量（模型左侧，右对齐不换行） */
+.ai-pm-mail-regen-stats {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  margin-right: 2px;
+}
+/* 模型下拉：无边框，显示「模型名 ▾」，原生 select 透明覆盖整个区域 */
+.ai-pm-model-pick {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.ai-pm-model-name {
+  font-size: 11px;
+  color: var(--text-normal);
+  white-space: nowrap;
+  text-decoration: underline;
+}
+.ai-pm-model-caret {
+  font-size: 9px;
+  color: var(--text-muted);
+  line-height: 1;
+}
+.ai-pm-mail-model-sel {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+.ai-pm-mail-regen-btn {
+  position: absolute;
+  right: 27px;
+  /* 相对文本框底边内缩 8px：容器底 padding 8px + 按钮内缩 8px = 16px */
+  bottom: 16px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  /* 紫色圆形 + 白色符号（!important 压过 Obsidian .modal button 默认样式） */
+  background: #7c3aed !important;
+  color: #fff !important;
+  border: none !important;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ai-pm-mail-regen-btn:hover {
+  background: #6d28d9 !important;
+  opacity: 0.95;
+}
+/* 底部按钮栏：sticky 固定在弹窗可视区底部，内容较长时发送按钮始终可见（无底色） */
+.ai-pm-mail-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 16px;
+  border-top: 1px solid var(--background-modifier-border);
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+}
+.ai-pm-mail-btn {
+  font-size: 12px;
+  padding: 6px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  cursor: pointer;
+}
+.ai-pm-mail-btn.primary {
+  /* 紫色背景 + 白色文字（!important 压过 Obsidian .modal button 默认样式） */
+  background: #7c3aed !important;
+  color: #fff !important;
+  border-color: #7c3aed !important;
+}
+.ai-pm-mail-btn.primary:hover {
+  background: #6d28d9 !important;
+  border-color: #6d28d9 !important;
+}
+.ai-pm-mail-btn.ghost {
+  color: var(--text-muted);
+}
+.ai-pm-mail-btn.small {
+  font-size: 11px;
+  padding: 3px 10px;
+  margin-top: 6px;
+}
+.ai-pm-mail-btn.left {
+  margin-right: auto;
+}
+/* 发送回写结果 */
+.ai-pm-mail-result {
+  padding: 4px 0;
+}
+.ai-pm-mail-ok {
+  background: #f2faf2;
+  border: 1px solid #c8e6c9;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #2e7d32;
+  margin-bottom: 10px;
+}
+.ai-pm-mail-ok-desc {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  line-height: 1.6;
+}
+.ai-pm-mail-ok.err {
+  background: #fdf0f0;
+  border-color: #ef9a9a;
+  color: #c62828;
+}
+.ai-pm-mail-count {
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.ai-pm-mail-result-block {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.ai-pm-mail-result-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.ai-pm-mail-result-acts {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.ai-pm-mail-result-acts .ai-pm-mail-btn.small {
+  margin-top: 0;
+}
+.ai-pm-mail-result-desc {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  line-height: 1.6;
+}
+.ai-pm-mail-muted {
+  color: var(--text-muted);
+  font-size: 11px;
+}
