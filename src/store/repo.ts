@@ -6,6 +6,7 @@
 import { App, FileSystemAdapter, Notice, TFile } from "obsidian";
 import { parseRequirementNote } from "../notes/parser";
 import { log } from "../utils/logger";
+import { listFilesRecursive } from "../utils/vaultFs";
 import type { RequirementNote, StatusCount } from "../types";
 
 /**
@@ -38,7 +39,13 @@ async function readNote(app: App, file: TFile, useDisk: boolean): Promise<string
 /** 按目录前缀扫描并解析需求笔记（并行读取，避免串行卡顿）；解析失败静默跳过并合并提示，避免批量刷屏 */
 export async function scanRequirementNotes(app: App, dir: string, useDisk = false): Promise<RequirementNote[]> {
   const prefix = dir.replace(/^\/+|\/+$/g, "");
-  const files = app.vault.getFiles().filter((f) => f.extension === "md" && f.path.startsWith(prefix + "/"));
+  // 仅枚举配置目录（Obsidian 审核合规：不走 vault.getFiles() 全库枚举）
+  const files = (
+    await listFilesRecursive(app, prefix)
+  )
+    .filter((p) => p.toLowerCase().endsWith(".md"))
+    .map((p) => app.vault.getAbstractFileByPath(p))
+    .filter((f): f is TFile => f instanceof TFile);
   log.debug(`扫描需求笔记：${files.length} 个文件（${prefix}/）`);
   let failed = 0;
   const results = await Promise.all(

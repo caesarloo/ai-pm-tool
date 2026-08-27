@@ -25,6 +25,7 @@ import { vaultBasePath } from "../utils/path";
 import { log } from "../utils/logger";
 import { loadSvnDiff, renderSvnDiffBox } from "./svnDiffPreview";
 import { runSvnSerialized } from "../utils/svnQueue";
+import { listFilesRecursive } from "../utils/vaultFs";
 
 /** 邮件三步流程步骤名（步骤条仅显示当前环节名，不展示 1-2-3 水平进度条） */
 const STEP_DEFS = ["生成草稿", "预览确认", "发送邮件"];
@@ -402,7 +403,12 @@ export class MailModal extends Modal {
     }
     const tplDirs = [`${dir}/邮件模板`, `${dir}/../邮件模板`];
     for (const tplDir of tplDirs) {
-      const files = this.app.vault.getFiles().filter((f) => f.extension === "md" && f.path.startsWith(tplDir + "/"));
+      const files = (
+        await listFilesRecursive(this.app, tplDir)
+      )
+        .filter((p) => p.toLowerCase().endsWith(".md"))
+        .map((p) => this.app.vault.getAbstractFileByPath(p))
+        .filter((f): f is TFile => f instanceof TFile);
       const match = files.find((f) => f.basename.includes(this.node.key));
       if (!match) continue;
       try {
