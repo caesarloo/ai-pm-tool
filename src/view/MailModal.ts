@@ -263,7 +263,7 @@ export class MailModal extends Modal {
 
     const gen = this.tabGen.createDiv({ cls: "ai-pm-mail-gen" });
     gen.createDiv({ cls: "ai-pm-mail-spinner" });
-    gen.createEl("div", { text: "LLM 正在读取需求笔记，自动生成「" + this.node.label + "」邮件…", cls: "ai-pm-mail-gen-t" });
+    gen.createDiv({ text: "LLM 正在读取需求笔记，自动生成「" + this.node.label + "」邮件…", cls: "ai-pm-mail-gen-t" });
     const tags = [
       `需求背景：${(this.note.raw["需求背景简述"] as string) ?? "—"}`.slice(0, 60),
       `功能点：${Array.isArray(this.note.raw["功能点"]) ? (this.note.raw["功能点"] as string[]).length : "—"} 项`,

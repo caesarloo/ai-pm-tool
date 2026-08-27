@@ -191,7 +191,7 @@ export class StatusView extends ItemView {
     const missing = checkSeedMissing(this.app, this.plugin.settings);
     if (missing.any) {
       const box = contentEl.createDiv({ cls: "ai-pm-empty-hint" });
-      box.createEl("span", { text: "⚡ 模板 / 规则未初始化", cls: "ai-pm-empty-hint-title" });
+      box.createSpan({ text: "⚡ 模板 / 规则未初始化", cls: "ai-pm-empty-hint-title" });
       const parts = [
         missing.missingRules ? "规则文件" : "",
         missing.missingContactBook ? "通讯录" : "",
@@ -212,7 +212,7 @@ export class StatusView extends ItemView {
     // ===== 需求笔记目录未配置：提示选择（§4.1） =====
     if (!this.plugin.settings.requirementDir.trim()) {
       const box = contentEl.createDiv({ cls: "ai-pm-empty-hint" });
-      box.createEl("span", { text: "⚠️ 未配置「需求笔记目录」", cls: "ai-pm-empty-hint-title" });
+      box.createSpan({ text: "⚠️ 未配置「需求笔记目录」", cls: "ai-pm-empty-hint-title" });
       box.createEl("p", {
         text: "项目总览需要知道需求笔记所在的仓库目录。请在「设置 → AI PM Tool → 需求笔记目录」中选择或输入目录。",
       });
@@ -224,8 +224,8 @@ export class StatusView extends ItemView {
 
     // ===== 头部 =====
     const header = contentEl.createDiv({ cls: "ai-pm-header" });
-    header.createEl("span", { text: "📋 项目总览", cls: "ai-pm-header-title" });
-    header.createEl("span", { text: `需求 · ${this.notes.length} 项`, cls: "ai-pm-header-count" });
+    header.createSpan({ text: "📋 项目总览", cls: "ai-pm-header-title" });
+    header.createSpan({ text: `需求 · ${this.notes.length} 项`, cls: "ai-pm-header-count" });
 
     // ===== 搜索（§4.3） =====
     const search = contentEl.createEl("input", {
@@ -318,7 +318,7 @@ export class StatusView extends ItemView {
     const date = this.snapshot?.date
       ? new Date(this.snapshot.date).toLocaleString("zh-CN", { hour12: false }).slice(0, 16)
       : "—";
-    footer.createEl("span", { text: `🕐 快照 r${rev} · ${date}`, cls: "ai-pm-footer-info" });
+    footer.createSpan({ text: `🕐 快照 r${rev} · ${date}`, cls: "ai-pm-footer-info" });
     const syncBtn = footer.createEl("button", {
       cls: "ai-pm-sync-btn",
       text: this.syncing ? "⏳ 同步中…" : "↻ 手动同步",

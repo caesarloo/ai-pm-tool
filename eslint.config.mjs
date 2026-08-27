@@ -32,6 +32,7 @@ export default tseslint.config(
       "obsidianmd/commands/no-default-hotkeys": "error",
       "obsidianmd/commands/no-plugin-id-in-command-id": "error",
       "obsidianmd/commands/no-plugin-name-in-command-name": "error",
+      "obsidianmd/prefer-create-el": "error",
       "obsidianmd/settings-tab/no-manual-html-headings": "error",
       "obsidianmd/settings-tab/no-problematic-settings-headings": "error",
       "obsidianmd/vault/iterate": "error",

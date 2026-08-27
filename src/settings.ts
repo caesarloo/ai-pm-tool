@@ -62,7 +62,7 @@ function renderProviders(plugin: AIPMTool, onRerender: () => void, providerList:
       plugin.settings.activeProviderId = p.id;
       void plugin.saveSettings().then(() => onRerender());
     });
-    const nameEl = head.createEl("span", { text: p.name || "（未命名）", cls: "ai-pm-provider-name" });
+    const nameEl = head.createSpan({ text: p.name || "（未命名）", cls: "ai-pm-provider-name" });
     const del = head.createEl("button", { cls: "ai-pm-provider-del", text: "✕" });
     del.title = "删除此模型";
     del.addEventListener("click", () => {
