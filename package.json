@@ -1,6 +1,6 @@
 {
   "name": "ai-pm-tool",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": true,
   "license": "MIT",
   "description": "Turn requirement notes into a live project overview: SVN snapshots, AI reminders, milestone tracking, and SMTP milestone emails",
