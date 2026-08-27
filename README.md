@@ -28,7 +28,7 @@ SVN is a standalone version-control system that Obsidian's API cannot drive. To 
 - Every call is bounded: 60s timeout, `windowsHide: true`, capped output; commands run **only when you actively trigger** them (manual sync / "Commit to SVN" / snapshot comparison) and only against your SVN working copy.
 - Through this channel the plugin never reads or modifies anything outside the SVN working copy, and never builds a command string from note content.
 
-**Current stable version**: `0.0.3`
+**Current stable version**: `0.0.4`
 
 **Latest release**: https://github.com/caesarloo/ai-pm-tool/releases
 
@@ -105,7 +105,7 @@ SVN 是独立版本控制系统，Obsidian 的 API 无法驱动它。同步 / �
 - 每次调用有边界：60 秒超时、`windowsHide: true`、输出有上限；仅在您**主动触发**时执行（手动同步 / 「提交SVN」/ 快照对比），且只作用于您的 SVN 工作副本。
 - 该通道不会读取或修改工作副本以外的任何内容，也绝不会根据笔记内容拼装命令字符串。
 
-**当前稳定版本**：`0.0.3`
+**当前稳定版本**：`0.0.4`
 
 **最新发布页**：https://github.com/caesarloo/ai-pm-tool/releases
 
