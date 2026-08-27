@@ -18,7 +18,7 @@ Full disclosure of what this plugin does on your system:
 - **Vault write** ✅ — creates / modifies vault files through the Obsidian API (`vault.modify` / `vault.create`), only for actions you confirm in the UI (sample generation, frontmatter updates, sent-mail records).
 - **Network** — SMTP outbound only when you configure it and click send; LLM API calls only to providers you configure (API keys stored in the system keychain via SecretStorage). No telemetry, no analytics, no clipboard access.
 
-**Current stable version**: `0.0.1`
+**Current stable version**: `0.0.2`
 
 **Latest release**: https://github.com/caesarloo/ai-pm-tool/releases
 
@@ -85,7 +85,7 @@ Settings → add an OpenAI-compatible provider (base URL, model, API key — sto
 - **写入 vault 文件** ✅ — 通过 Obsidian API 创建/修改文件（`vault.modify` / `vault.create`），仅限您在界面中确认的操作（生成示例、frontmatter 更新、发送记录留痕）。
 - **网络** — 仅在您配置 SMTP 并点击发送时出站发信；仅向您配置的 LLM provider 发起 API 调用（密钥经 SecretStorage 存系统密钥库）。无遥测、无统计、无剪贴板访问。
 
-**当前稳定版本**：`0.0.1`
+**当前稳定版本**：`0.0.2`
 
 **最新发布页**：https://github.com/caesarloo/ai-pm-tool/releases
 
