@@ -60,11 +60,13 @@ async function rotateIfNeeded(): Promise<void> {
 }
 
 function write(level: string, msg: string): void {
-  if (!adapter || !logPath || !fileEnabled) return;
+  const a = adapter;
+  const p = logPath;
+  if (!a || !p || !fileEnabled) return;
   void (async () => {
     try {
       await rotateIfNeeded();
-      await adapter!.append(logPath, `${ts()} [${level}] ${msg}\n`);
+      await a.append(p, `${ts()} [${level}] ${msg}\n`);
     } catch {
       /* 写失败不阻塞主流程 */
     }
@@ -95,7 +97,7 @@ export const log = {
     write("DEBUG", msg + fmtArgs(args));
   },
   info: (msg: string, ...args: unknown[]) => {
-    console.info(`[AI-PM] ${msg}`, ...args);
+    // 不输出到控制台（避免无必要日志）；仍写入文件（设置开启时）
     write("INFO", msg + fmtArgs(args));
   },
   warn: (msg: string, ...args: unknown[]) => {

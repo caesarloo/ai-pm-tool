@@ -414,16 +414,16 @@ class SmtpSession {
       return Promise.resolve(resp);
     }
     return new Promise((resolve) => {
-      let timer: ReturnType<typeof setTimeout> | null = null;
+      let timer: number | null = null;
       if (timeoutMs && timeoutMs > 0) {
-        timer = setTimeout(() => {
+        timer = window.setTimeout(() => {
           const i = this.responders.indexOf(waiter);
           if (i >= 0) this.responders.splice(i, 1);
           resolve([]);
         }, timeoutMs);
       }
       const waiter = (lines: string[]): void => {
-        if (timer) clearTimeout(timer);
+        if (timer) window.window.clearTimeout(timer);
         resolve(lines);
       };
       this.responders.push(waiter);
@@ -442,21 +442,21 @@ class SmtpSession {
         encryption === "tls"
           ? tlsConnect({ host, port, servername: host, rejectUnauthorized: !skipTlsVerify })
           : netConnect({ host, port });
-      const timer = setTimeout(() => {
+      const timer = window.setTimeout(() => {
         raw.destroy();
         reject(new Error(`连接超时（${host}:${port}）`));
       }, timeoutMs);
       raw.once("error", (e) => {
-        clearTimeout(timer);
-        reject(e);
+        window.window.clearTimeout(timer);
+        reject(e instanceof Error ? e : new Error(String(e)));
       });
       raw.once("connect", () => {
-        clearTimeout(timer);
+        window.clearTimeout(timer);
         this.attach(raw);
         resolve();
       });
       raw.once("secureConnect", () => {
-        clearTimeout(timer);
+        window.clearTimeout(timer);
         this.attach(raw);
         resolve();
       });
@@ -484,10 +484,10 @@ class SmtpSession {
     if (this.closed || !this.sock) return Promise.resolve(["999 SMTP 连接不可用"]);
     return new Promise((resolve) => {
       const respond = (lines: string[]): void => {
-        clearTimeout(timer);
+        window.clearTimeout(timer);
         resolve(lines);
       };
-      const timer = setTimeout(() => {
+      const timer = window.setTimeout(() => {
         const i = this.responders.indexOf(respond);
         if (i >= 0) this.responders.splice(i, 1);
         this.failAll(new Error(`SMTP 响应超时（${timeoutMs}ms 未收到响应）`));
@@ -499,7 +499,7 @@ class SmtpSession {
         if (err) {
           const i = this.responders.indexOf(respond);
           if (i >= 0) this.responders.splice(i, 1);
-          clearTimeout(timer);
+          window.clearTimeout(timer);
           resolve([`999 ${err.message}`]);
         }
       });
@@ -513,7 +513,7 @@ class SmtpSession {
       if (!raw) return reject(new Error("连接不可用"));
       raw.removeAllListeners("data");
       const tlsSock = tlsConnect({ socket: raw, servername, rejectUnauthorized: !skipTlsVerify });
-      tlsSock.once("error", (e) => reject(e));
+      tlsSock.once("error", (e) => reject(e instanceof Error ? e : new Error(String(e))));
       tlsSock.once("secureConnect", () => {
         this.attach(tlsSock);
         resolve();

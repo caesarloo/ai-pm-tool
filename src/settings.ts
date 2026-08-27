@@ -56,23 +56,21 @@ function renderProviders(plugin: AIPMTool, onRerender: () => void, providerList:
     const radio = head.createEl("input", {
       type: "radio",
       attr: { name: "activeProvider", title: "启用此模型" },
-    }) as HTMLInputElement;
+    });
     radio.checked = p.id === activeProviderId;
-    radio.addEventListener("change", async () => {
+    radio.addEventListener("change", () => {
       plugin.settings.activeProviderId = p.id;
-      await plugin.saveSettings();
-      onRerender();
+      void plugin.saveSettings().then(() => onRerender());
     });
     const nameEl = head.createEl("span", { text: p.name || "（未命名）", cls: "ai-pm-provider-name" });
     const del = head.createEl("button", { cls: "ai-pm-provider-del", text: "✕" });
     del.title = "删除此模型";
-    del.addEventListener("click", async () => {
+    del.addEventListener("click", () => {
       plugin.settings.llmProviders.splice(i, 1);
       if (plugin.settings.activeProviderId === p.id) {
         plugin.settings.activeProviderId = null;
       }
-      await plugin.saveSettings();
-      onRerender();
+      void plugin.saveSettings().then(() => onRerender());
     });
 
     // 四个参数：分四行配置
@@ -247,11 +245,11 @@ export class AIPMSettingTab extends PluginSettingTab {
       })
       .addButton((b) =>
         b.setButtonText("选择目录…").onClick(() => {
-          new FolderPickerModal(this.app, async (path) => {
+          new FolderPickerModal(this.app, (path) => {
             this.plugin.settings.requirementDir = path;
             input?.setValue(path);
             syncError();
-            await this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           }).open();
         })
       );
@@ -275,10 +273,10 @@ export class AIPMSettingTab extends PluginSettingTab {
       })
       .addButton((b) =>
         b.setButtonText("选择目录…").onClick(() => {
-          new FolderPickerModal(this.app, async (path) => {
+          new FolderPickerModal(this.app, (path) => {
             this.plugin.settings.attachmentTemplateDir = path;
             input?.setValue(path);
-            await this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           }).open();
         })
       );
@@ -302,10 +300,10 @@ export class AIPMSettingTab extends PluginSettingTab {
       })
       .addButton((b) =>
         b.setButtonText("选择文件…").onClick(() => {
-          new FilePickerModal(this.app, async (path) => {
+          new FilePickerModal(this.app, (path) => {
             this.plugin.settings.contactBookPath = path;
             input?.setValue(path);
-            await this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           }).open();
         })
       );

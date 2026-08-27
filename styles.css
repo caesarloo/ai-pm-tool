@@ -1087,3 +1087,7 @@ a.ai-pm-pick-name:hover {
   color: var(--text-muted);
   font-size: 11px;
 }
+
+/* 隐藏文件选择 input（仅用于触发选择器，附件上传用） */
+.ai-pm-file-input-hidden { display: none; }
+

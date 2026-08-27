@@ -8,6 +8,7 @@
  *   自定义代理（Node https + CONNECT 隧道，如 http://127.0.0.1:7897）
  * - 敏感信息脱敏（§5 / §7）；所有请求均输出详细日志（模式/地址/耗时/错误码），便于排查网络问题
  */
+import { requestUrl } from "obsidian";
 import type { AIPMSettings, LLMProvider } from "../types";
 import { log } from "../utils/logger";
 import { request as nodeHttpRequest, type ClientRequest, type IncomingMessage } from "node:http";
@@ -78,14 +79,14 @@ class ConnectAgent extends HttpsAgent {
       const idx = buffered.indexOf("\r\n\r\n");
       if (idx < 0) return;
       raw.off("data", onData);
-      const head = buffered.slice(0, idx).toString("latin1");
+      const head = buffered.subarray(0, idx).toString("latin1");
       const m = /^HTTP\/1\.[01]\s+(\d{3})/.exec(head);
       if (!m || m[1] !== "200") {
         raw.destroy();
         cb(new Error(`代理 CONNECT 失败：${head.split("\r\n")[0] || head}`), undefined);
         return;
       }
-      const rest = buffered.slice(idx + 4);
+      const rest = buffered.subarray(idx + 4);
       const tls = tlsConnect({
         socket: raw,
         servername: host,
@@ -204,15 +205,27 @@ export class LLMGateway {
 
     let res: { status: number; text: string };
     if (mode === "system") {
-      // Electron/Chromium fetch：继承操作系统代理设置
+      // Obsidian requestUrl（Electron 网络栈）：继承操作系统代理设置
       try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 60000);
+        let timer: number | undefined;
         try {
-          const r = await fetch(url, { method: "POST", headers, body, signal: controller.signal });
-          res = { status: r.status, text: await r.text() };
+          const request = requestUrl({
+            url: url.href,
+            method: "POST",
+            contentType: "application/json",
+            headers,
+            body,
+            throw: false,
+          }).then((r) => ({ status: r.status, text: r.text }));
+          const timeout = new Promise<never>((_, reject) => {
+            timer = window.setTimeout(
+              () => reject(new LlmError("模型请求超时（60s）：请检查网络或模型服务响应速度")),
+              60000
+            );
+          });
+          res = await Promise.race([request, timeout]);
         } finally {
-          clearTimeout(timer);
+          if (timer !== undefined) window.clearTimeout(timer);
         }
         log.debug(`LLM 响应：status=${res.status} 耗时=${Date.now() - t0}ms`);
       } catch (e) {

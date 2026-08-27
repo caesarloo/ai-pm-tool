@@ -112,7 +112,7 @@ export default class AIPMTool extends Plugin {
   async activateStatusView(): Promise<void> {
     const existing = this.getStatusView();
     if (existing) {
-      this.app.workspace.revealLeaf(existing.leaf);
+      await this.app.workspace.revealLeaf(existing.leaf);
       void existing.refresh();
       return;
     }
@@ -122,7 +122,7 @@ export default class AIPMTool extends Plugin {
       return;
     }
     await leaf.setViewState({ type: STATUS_VIEW_TYPE, active: true });
-    this.app.workspace.revealLeaf(leaf);
+    await this.app.workspace.revealLeaf(leaf);
   }
 
   private getStatusView(): StatusView | null {
