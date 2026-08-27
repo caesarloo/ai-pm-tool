@@ -38,7 +38,7 @@ export class FilePickerModal extends FuzzySuggestModal<TFile> {
 
   async onOpen(): Promise<void> {
     this.files = await this.ready;
-    super.onOpen();
+    await super.onOpen();
   }
 
   getItems(): TFile[] {
