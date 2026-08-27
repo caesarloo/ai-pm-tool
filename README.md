@@ -13,7 +13,7 @@
 Full disclosure of what this plugin does on your system:
 
 - **Shell execution** ⚠️ — calls the system **`svn` command-line client** via Node `child_process.execFile` (no shell parsing, fixed argument arrays only). It runs **only when you actively trigger** an SVN operation (manual sync / "Commit to SVN" / snapshot comparison), and only commands against your SVN working copy. Input is validated to block injection and path traversal; passwords are masked in logs. `svn` is never bundled or downloaded — you install it yourself.
-- **Vault enumeration** — scans **Markdown files only inside the directories you configure** (requirement directory, template directory) to parse frontmatter for the project overview. The file picker lists Markdown filenames **only while you have it open** to choose a path in Settings; no content is read until you pick a file.
+- **Vault enumeration** — scans **Markdown files only inside the directories you configure** (requirement directory, template directory) to parse frontmatter for the project overview. The file picker lists Markdown filenames **only inside the current context directory** (the configured contact-book's parent folder, or the template directory) and **only while you have it open**; no content is read until you pick a file.
 - **Vault read** ✅ — reads individual vault files through the Obsidian API (`vault.read` / `vault.cachedRead`).
 - **Vault write** ✅ — creates / modifies vault files through the Obsidian API (`vault.modify` / `vault.create`), only for actions you confirm in the UI (sample generation, frontmatter updates, sent-mail records).
 - **Network** — SMTP outbound only when you configure it and click send; LLM API calls only to providers you configure (API keys stored in the system keychain via SecretStorage). No telemetry, no analytics, no clipboard access.
@@ -80,7 +80,7 @@ Settings → add an OpenAI-compatible provider (base URL, model, API key — sto
 插件在您系统上的行为如实披露如下：
 
 - **执行系统命令** ⚠️ — 通过 Node `child_process.execFile` 调用系统 **`svn` 命令行客户端**（无 shell 解析，仅固定参数数组）。仅在您**主动触发** SVN 操作时执行（手动同步 / 「提交SVN」/ 快照对比），且只对您的 SVN 工作副本执行命令；输入经校验以拦截命令注入与路径穿越，日志中的密码参数会被脱敏。插件不捆绑 svn，需您自行安装。
-- **枚举 vault 文件** — 仅扫描**您配置的目录**（需求笔记目录、模板目录）下的 Markdown 文件，解析 frontmatter 用于项目总览；文件选择器只在您主动打开时列出 Markdown 文件名供设置项选择，未选择前不读取任何内容。
+- **枚举 vault 文件** — 仅扫描**您配置的目录**（需求笔记目录、模板目录）下的 Markdown 文件，解析 frontmatter 用于项目总览；文件选择器仅在您主动打开时，列出**当前目录上下文**（通讯录所在目录，或模板目录）内的 Markdown 文件名供设置项选择，未选择前不读取任何内容。
 - **读取 vault 文件** ✅ — 通过 Obsidian API 读取单个文件（`vault.read` / `vault.cachedRead`）。
 - **写入 vault 文件** ✅ — 通过 Obsidian API 创建/修改文件（`vault.modify` / `vault.create`），仅限您在界面中确认的操作（生成示例、frontmatter 更新、发送记录留痕）。
 - **网络** — 仅在您配置 SMTP 并点击发送时出站发信；仅向您配置的 LLM provider 发起 API 调用（密钥经 SecretStorage 存系统密钥库）。无遥测、无统计、无剪贴板访问。

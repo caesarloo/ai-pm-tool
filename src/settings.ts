@@ -300,13 +300,30 @@ export class AIPMSettingTab extends PluginSettingTab {
       })
       .addButton((b) =>
         b.setButtonText("选择文件…").onClick(() => {
-          new FilePickerModal(this.app, (path) => {
-            this.plugin.settings.contactBookPath = path;
-            input?.setValue(path);
-            void this.plugin.saveSettings();
-          }).open();
+          // 目录上下文（Obsidian 审核合规：选择器仅枚举该目录，不走 vault.getFiles() 全库枚举）：
+          // 优先「通讯录当前所在目录」，其次「邮件模板目录」；都没有 → 空列表（提示直接输入路径）
+          const baseDir = this.contactBookPickerBaseDir();
+          new FilePickerModal(
+            this.app,
+            (path) => {
+              this.plugin.settings.contactBookPath = path;
+              input?.setValue(path);
+              void this.plugin.saveSettings();
+            },
+            baseDir
+          ).open();
         })
       );
+  }
+
+  /** 通讯录文件选择器的枚举范围：优先「通讯录当前所在目录」，其次「邮件模板目录」；都没有 → 空串（仅提示手动输入） */
+  private contactBookPickerBaseDir(): string {
+    const cb = this.plugin.settings.contactBookPath.trim();
+    if (cb) {
+      const idx = cb.lastIndexOf("/");
+      if (idx > 0) return cb.slice(0, idx);
+    }
+    return this.plugin.settings.attachmentTemplateDir.trim();
   }
 
   /**
