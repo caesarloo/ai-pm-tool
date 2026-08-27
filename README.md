@@ -18,6 +18,16 @@ Full disclosure of what this plugin does on your system:
 - **Vault write** ✅ — creates / modifies vault files through the Obsidian API (`vault.modify` / `vault.create`), only for actions you confirm in the UI (sample generation, frontmatter updates, sent-mail records).
 - **Network** — SMTP outbound only when you configure it and click send; LLM API calls only to providers you configure (API keys stored in the system keychain via SecretStorage). No telemetry, no analytics, no clipboard access.
 
+**Why the plugin invokes the system `svn` command**
+
+SVN is a standalone version-control system that Obsidian's API cannot drive. To sync / commit / compare snapshots the plugin must call the system `svn` CLI — there is no alternative path, which is why this is disclosed rather than hidden. The call is as narrow as it can be:
+
+- `child_process.execFile` only — **no shell** (`shell: false`), no string-built commands; every invocation is a fixed `svn` binary plus a static argument array (paths and the commit message are passed as separate argv entries).
+- `svn` is **never bundled or downloaded** — it is auto-detected from PATH / common install locations, or you can set the path yourself; if it is missing, the SVN features degrade gracefully and nothing executes.
+- Input validation runs before every call: shell metacharacters, path traversal and comments are rejected; commit messages are checked for illegal control characters; passwords are masked in logs.
+- Every call is bounded: 60s timeout, `windowsHide: true`, capped output; commands run **only when you actively trigger** them (manual sync / "Commit to SVN" / snapshot comparison) and only against your SVN working copy.
+- Through this channel the plugin never reads or modifies anything outside the SVN working copy, and never builds a command string from note content.
+
 **Current stable version**: `0.0.2`
 
 **Latest release**: https://github.com/caesarloo/ai-pm-tool/releases
@@ -84,6 +94,16 @@ Settings → add an OpenAI-compatible provider (base URL, model, API key — sto
 - **读取 vault 文件** ✅ — 通过 Obsidian API 读取单个文件（`vault.read` / `vault.cachedRead`）。
 - **写入 vault 文件** ✅ — 通过 Obsidian API 创建/修改文件（`vault.modify` / `vault.create`），仅限您在界面中确认的操作（生成示例、frontmatter 更新、发送记录留痕）。
 - **网络** — 仅在您配置 SMTP 并点击发送时出站发信；仅向您配置的 LLM provider 发起 API 调用（密钥经 SecretStorage 存系统密钥库）。无遥测、无统计、无剪贴板访问。
+
+**为何需要调用系统 `svn` 命令**
+
+SVN 是独立版本控制系统，Obsidian 的 API 无法驱动它。同步 / 提交 / 快照对比必须调用系统 `svn` 命令行——没有其他可行路径，因此本插件如实披露而非隐藏该行为。调用面已压缩到最小：
+
+- 仅使用 `child_process.execFile`——**不经过 shell**（`shell: false`），不用字符串拼接命令；每次调用都是固定的 `svn` 可执行文件 + 静态参数数组（路径与提交备注作为独立 argv 传入）。
+- **不捆绑、不下载** svn——自动探测 PATH / 常见安装位置，或由您自行配置路径；svn 缺失时 SVN 功能优雅降级，不执行任何命令。
+- 每次调用前做输入校验：拒绝 shell 元字符、路径穿越与注释；提交备注校验非法控制字符；日志中密码脱敏。
+- 每次调用有边界：60 秒超时、`windowsHide: true`、输出有上限；仅在您**主动触发**时执行（手动同步 / 「提交SVN」/ 快照对比），且只作用于您的 SVN 工作副本。
+- 该通道不会读取或修改工作副本以外的任何内容，也绝不会根据笔记内容拼装命令字符串。
 
 **当前稳定版本**：`0.0.2`
 
