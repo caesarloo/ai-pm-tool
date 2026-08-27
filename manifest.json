@@ -1,7 +1,7 @@
 {
   "id": "ai-pm-tool",
   "name": "AI PM Tool",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "minAppVersion": "1.13.0",
   "description": "Turn requirement notes into a live project overview: parse frontmatter, sync SVN snapshots, track milestone progress with AI reminders, and send milestone emails.",
   "author": "caesarloo",

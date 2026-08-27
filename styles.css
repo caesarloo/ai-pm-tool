@@ -546,14 +546,14 @@ a.ai-pm-pick-name:hover {
   cursor: pointer;
 }
 .ai-pm-progress .ai-pm-btn.primary {
-  /* 紫色背景 + 白色文字（!important 压过 Obsidian .modal button 默认样式） */
-  background: #7c3aed !important;
-  color: #fff !important;
-  border-color: #7c3aed !important;
+  /* 紫色背景 + 白色文字（特异性高于 Obsidian 默认 button 样式，无需 !important） */
+  background: #7c3aed;
+  color: #fff;
+  border-color: #7c3aed;
 }
 .ai-pm-progress .ai-pm-btn.primary:hover {
-  background: #6d28d9 !important;
-  border-color: #6d28d9 !important;
+  background: #6d28d9;
+  border-color: #6d28d9;
 }
 .ai-pm-progress .ai-pm-btn.ghost {
   color: var(--text-muted);
@@ -702,11 +702,11 @@ a.ai-pm-pick-name:hover {
   padding: 2px 8px;
   max-width: 100%;
 }
-.ai-pm-chip-x {
-  /* 透明底、无边框、无圆角阴影（!important 压过 Obsidian .modal button 白底样式） */
-  border: none !important;
-  background: transparent !important;
-  box-shadow: none !important;
+.ai-pm-chip .ai-pm-chip-x {
+  /* 透明底、无边框、无圆角阴影（父类链提高特异性，覆盖 Obsidian 默认 button 样式） */
+  border: none;
+  background: transparent;
+  box-shadow: none;
   color: var(--text-muted);
   cursor: pointer;
   padding: 0 1px;
@@ -811,22 +811,22 @@ a.ai-pm-pick-name:hover {
 }
 /* 表格显示加固：覆盖 Obsidian 阅读视图样式（display:block/max-content 等），保证预览编辑中表格正常 */
 .ai-pm-mail-body-preview.markdown-rendered table {
-  display: table !important;
-  width: 100% !important;
-  max-width: 100% !important;
-  border-collapse: collapse !important;
-  margin: 8px 0 !important;
+  display: table;
+  width: 100%;
+  max-width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
   table-layout: auto;
 }
 .ai-pm-mail-body-preview.markdown-rendered th,
 .ai-pm-mail-body-preview.markdown-rendered td {
-  border: 1px solid var(--background-modifier-border) !important;
-  padding: 4px 8px !important;
+  border: 1px solid var(--background-modifier-border);
+  padding: 4px 8px;
   vertical-align: top;
   white-space: normal;
 }
 .ai-pm-mail-body-preview.markdown-rendered th {
-  background: var(--background-secondary) !important;
+  background: var(--background-secondary);
   font-weight: 600;
 }
 .ai-pm-mail-body-preview.markdown-rendered .table-wrapper {
@@ -961,7 +961,7 @@ a.ai-pm-pick-name:hover {
   background: transparent;
   cursor: pointer;
 }
-.ai-pm-mail-regen-btn {
+.ai-pm-mail-regen .ai-pm-mail-regen-btn {
   position: absolute;
   right: 27px;
   /* 相对文本框底边内缩 8px：容器底 padding 8px + 按钮内缩 8px = 16px */
@@ -969,10 +969,10 @@ a.ai-pm-pick-name:hover {
   width: 27px;
   height: 27px;
   border-radius: 50%;
-  /* 紫色圆形 + 白色符号（!important 压过 Obsidian .modal button 默认样式） */
-  background: #7c3aed !important;
-  color: #fff !important;
-  border: none !important;
+  /* 紫色圆形 + 白色符号（父类链提高特异性，覆盖 Obsidian 默认 button 样式） */
+  background: #7c3aed;
+  color: #fff;
+  border: none;
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
@@ -981,8 +981,8 @@ a.ai-pm-pick-name:hover {
   align-items: center;
   justify-content: center;
 }
-.ai-pm-mail-regen-btn:hover {
-  background: #6d28d9 !important;
+.ai-pm-mail-regen .ai-pm-mail-regen-btn:hover {
+  background: #6d28d9;
   opacity: 0.95;
 }
 /* 底部按钮栏：sticky 固定在弹窗可视区底部，内容较长时发送按钮始终可见（无底色） */
@@ -1007,14 +1007,14 @@ a.ai-pm-pick-name:hover {
   cursor: pointer;
 }
 .ai-pm-mail-btn.primary {
-  /* 紫色背景 + 白色文字（!important 压过 Obsidian .modal button 默认样式） */
-  background: #7c3aed !important;
-  color: #fff !important;
-  border-color: #7c3aed !important;
+  /* 紫色背景 + 白色文字（特异性高于 Obsidian 默认 button 样式，无需 !important） */
+  background: #7c3aed;
+  color: #fff;
+  border-color: #7c3aed;
 }
 .ai-pm-mail-btn.primary:hover {
-  background: #6d28d9 !important;
-  border-color: #6d28d9 !important;
+  background: #6d28d9;
+  border-color: #6d28d9;
 }
 .ai-pm-mail-btn.ghost {
   color: var(--text-muted);
@@ -1087,3 +1087,7 @@ a.ai-pm-pick-name:hover {
   color: var(--text-muted);
   font-size: 11px;
 }
+
+/* 隐藏文件选择 input（仅用于触发选择器，附件上传用） */
+.ai-pm-file-input-hidden { display: none; }
+

@@ -25,6 +25,7 @@ import { vaultBasePath } from "../utils/path";
 import { log } from "../utils/logger";
 import { loadSvnDiff, renderSvnDiffBox } from "./svnDiffPreview";
 import { runSvnSerialized } from "../utils/svnQueue";
+import { listFilesRecursive } from "../utils/vaultFs";
 
 /** 邮件三步流程步骤名（步骤条仅显示当前环节名，不展示 1-2-3 水平进度条） */
 const STEP_DEFS = ["生成草稿", "预览确认", "发送邮件"];
@@ -402,7 +403,12 @@ export class MailModal extends Modal {
     }
     const tplDirs = [`${dir}/邮件模板`, `${dir}/../邮件模板`];
     for (const tplDir of tplDirs) {
-      const files = this.app.vault.getFiles().filter((f) => f.extension === "md" && f.path.startsWith(tplDir + "/"));
+      const files = (
+        await listFilesRecursive(this.app, tplDir)
+      )
+        .filter((p) => p.toLowerCase().endsWith(".md"))
+        .map((p) => this.app.vault.getAbstractFileByPath(p))
+        .filter((f): f is TFile => f instanceof TFile);
       const match = files.find((f) => f.basename.includes(this.node.key));
       if (!match) continue;
       try {
@@ -473,7 +479,7 @@ export class MailModal extends Modal {
     const sField = mail.createDiv({ cls: "ai-pm-mail-field" });
     sField.createDiv({ cls: "ai-pm-mail-lb", text: "主题" });
     const sVal = sField.createDiv({ cls: "ai-pm-mail-val" });
-    const subjInput = sVal.createEl("input", { cls: "ai-pm-mail-input", attr: { type: "text" } }) as HTMLInputElement;
+    const subjInput = sVal.createEl("input", { cls: "ai-pm-mail-input", attr: { type: "text" } });
     subjInput.value = this.draft.subject;
     subjInput.addEventListener("input", () => {
       this.draft.subject = subjInput.value;
@@ -538,7 +544,7 @@ export class MailModal extends Modal {
           const ordered = tag === "OL";
           Array.from(e.children).forEach((li, idx) => {
             const liEl = li as HTMLElement;
-            const cb = liEl.querySelector("input[type=checkbox]") as HTMLInputElement | null;
+            const cb = liEl.querySelector<HTMLInputElement>("input[type=checkbox]");
             const text = walkInline(liEl).trim();
             if (cb) blocks.push(`- [${cb.checked ? "x" : " "}] ${text}`);
             else blocks.push(ordered ? `${idx + 1}. ${text}` : `- ${text}`);
@@ -594,7 +600,7 @@ export class MailModal extends Modal {
       });
     }
     const uploadBtn = attBox.createEl("button", { cls: "ai-pm-mail-btn small", text: "+ 添加附件" });
-    uploadBtn.addEventListener("click", () => this.uploadAttachment());
+    uploadBtn.addEventListener("click", () => void this.uploadAttachment());
 
     // 生成正文报错：第一行 ⚠️ 草稿生成失败 + 模板草稿引导；大模型具体报错显示在下方「生成中」文案位置（可换行）
     if (this.genFailed && this.genError) {
@@ -630,18 +636,19 @@ export class MailModal extends Modal {
       nameEl.textContent = active ? `${active.name} · ${active.model}` : "未启用模型";
     }
     modelSel.value = this.plugin.settings.activeProviderId ?? "";
-    modelSel.addEventListener("change", async () => {
+    modelSel.addEventListener("change", () => {
       const id = modelSel.value || null;
       this.plugin.settings.activeProviderId = id;
-      await this.plugin.saveSettings();
-      const p = providers.find((x) => x.id === id);
-      nameEl.textContent = p ? `${p.name} · ${p.model}` : "未启用模型";
-      new Notice(p ? `已切换模型：${p.name} · ${p.model}` : "已停用模型", 3000);
+      void this.plugin.saveSettings().then(() => {
+        const p = providers.find((x) => x.id === id);
+        nameEl.textContent = p ? `${p.name} · ${p.model}` : "未启用模型";
+        new Notice(p ? `已切换模型：${p.name} · ${p.model}` : "已停用模型", 3000);
+      });
     });
     const regenTa = regenBox.createEl("textarea", {
       cls: "ai-pm-mail-regen-ta",
       attr: { placeholder: "调整要求，如：补充测试结论；正文精简…（留空则按默认重新生成）" },
-    }) as HTMLTextAreaElement;
+    });
     const regenBtn = regenBox.createEl("button", { cls: "ai-pm-mail-regen-btn", attr: { title: "按要求重新生成" }, text: "↑" });
     regenBtn.addEventListener("click", () => {
       const req = regenTa.value.trim(); // 读取调整要求（此前被忽略，导致用户要求不进入 prompt）
@@ -698,7 +705,7 @@ export class MailModal extends Modal {
           render();
         });
       });
-      const input = box.createEl("input", { cls: "ai-pm-mail-chip-input", attr: { type: "text", placeholder: "输入邮箱/姓名，回车或点「添加」" } }) as HTMLInputElement;
+      const input = box.createEl("input", { cls: "ai-pm-mail-chip-input", attr: { type: "text", placeholder: "输入邮箱/姓名，回车或点「添加」" } });
       const add = (): void => {
         const v = this.resolveEmail(input.value.trim());
         if (!v) return;
@@ -724,10 +731,11 @@ export class MailModal extends Modal {
   }
 
   private async uploadAttachment(): Promise<void> {
-    const input = document.createElement("input");
-    input.type = "file";
+    const input = this.contentEl.createEl("input", { attr: { type: "file" } });
+    input.addClass("ai-pm-file-input-hidden"); // 隐藏 file input（仅用于触发选择器），完成后从 DOM 移除
     input.onchange = async () => {
       const file = input.files?.[0];
+      input.remove();
       if (!file) return;
       if (file.size > MAX_ATTACH_TOTAL) {
         new Notice(`附件超过 25MB 上限（${(file.size / 1048576).toFixed(1)}MB），请压缩后重试`, 5000);
@@ -1009,7 +1017,7 @@ class EmailFillModal extends Modal {
     const input = contentEl.createEl("input", {
       cls: "ai-pm-mail-input",
       attr: { type: "text", placeholder: "name@example.com", autocomplete: "off" },
-    }) as HTMLInputElement;
+    });
     const save = (): void => {
       const v = input.value.trim();
       if (!v || !v.includes("@")) {

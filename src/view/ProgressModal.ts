@@ -233,7 +233,7 @@ export class ProgressModal extends Modal {
       }
     });
     // 异步补充正文「邮件发送时间」
-    this.fillStageDates(tl, stages);
+    void this.fillStageDates(tl, stages);
 
     // ===== 只读字段区（规则 2.4 只读字段区字段驱动；有值才显示，不修改） =====
     const extras: { label: string; value: string }[] = [];
@@ -294,7 +294,7 @@ export class ProgressModal extends Modal {
     // ===== 底部按钮（关闭走右上角 ✕，与「返回/取消」行为相同，避免重复） =====
     const foot = contentEl.createDiv({ cls: "ai-pm-modal-foot" });
     const submit = foot.createEl("button", { cls: "ai-pm-btn primary", text: "⬆️ 提交SVN" });
-    submit.addEventListener("click", () => this.submit());
+    submit.addEventListener("click", () => void this.submit());
 
     // 异步加载 SVN 未提交变更（svn diff），预览展示真实差异
     void this.loadSvnDiff();
@@ -325,7 +325,7 @@ export class ProgressModal extends Modal {
   private openNoteFile(): void {
     const file = this.app.vault.getAbstractFileByPath(this.note.path);
     if (file instanceof TFile) {
-      this.app.workspace.getLeaf(false).openFile(file);
+      void this.app.workspace.getLeaf(false).openFile(file);
     } else {
       new Notice("找不到笔记文件", 3000);
     }

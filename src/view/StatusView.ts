@@ -204,9 +204,8 @@ export class StatusView extends ItemView {
       actions.createEl("button", { text: "⚙️ 设置路径", cls: "ai-pm-sync-btn" }).addEventListener("click", () =>
         this.openSettings()
       );
-      actions.createEl("button", { text: "⚡ 一键生成示例", cls: "ai-pm-sync-btn" }).addEventListener("click", async () => {
-        await this.plugin.ensureSeed(true);
-        void this.refresh();
+      actions.createEl("button", { text: "⚡ 一键生成示例", cls: "ai-pm-sync-btn" }).addEventListener("click", () => {
+        void this.plugin.ensureSeed(true).then(() => this.refresh());
       });
     }
 
@@ -324,7 +323,7 @@ export class StatusView extends ItemView {
       cls: "ai-pm-sync-btn",
       text: this.syncing ? "⏳ 同步中…" : "↻ 手动同步",
     });
-    syncBtn.addEventListener("click", () => this.sync());
+    syncBtn.addEventListener("click", () => void this.sync());
 
     // ===== 变更记录（§4.4：默认折叠；拼接在同步按钮下方） =====
     if (this.changelogVisible) {
@@ -418,7 +417,7 @@ export class StatusView extends ItemView {
     const fold = ops.createEl("button", { cls: "ai-pm-chg-btn", text: this.changelogExpanded ? "▲" : "▼" });
     fold.addEventListener("click", () => {
       this.changelogExpanded = !this.changelogExpanded;
-      const body = cl.querySelector(".ai-pm-chg-body") as HTMLElement | null;
+      const body = cl.querySelector<HTMLElement>(".ai-pm-chg-body");
       if (body) body.style.display = this.changelogExpanded ? "" : "none";
       fold.textContent = this.changelogExpanded ? "▲" : "▼";
     });
