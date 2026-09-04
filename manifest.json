@@ -1,9 +1,9 @@
 {
   "id": "ai-pm-tool",
   "name": "AI PM Tool",
-  "version": "0.0.5",
+  "version": "0.1.0",
   "minAppVersion": "1.13.0",
-  "description": "Turn requirement notes into a live project overview: parse frontmatter, sync SVN snapshots, track milestone progress with AI reminders, and send milestone emails.",
+  "description": "Turn requirement notes into a live project overview: parse frontmatter, sync SVN snapshots, track milestone progress, send milestone emails, and generate requirement notes with LLM (Templater skeleton + LLM frontmatter + SKILL content review).",
   "author": "caesarloo",
   "authorUrl": "https://github.com/caesarloo",
   "isDesktopOnly": true

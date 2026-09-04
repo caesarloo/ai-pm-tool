@@ -4,8 +4,7 @@
  *   留空 = 不加载通讯录（收件人按姓名匹配通讯录，未匹配时原样保留并在发送前提示补充邮箱）
  * - 「全体名单/收件人名单」表（姓名/邮箱）→ 姓名 → 邮箱；
  *   「公共邮箱/抄送邮箱」表（名称/邮箱）→ 部门邮件组公共邮箱（默认抄送）
- * - 邮箱列：取表格行中首个含 @ 的单元格——新格式两列「姓名|邮箱」即第二列；
- *   兼容旧版三列「姓名|工号|邮箱」：忽略工号列（不再按工号推导邮箱），无邮箱的行自动跳过
+ * - 邮箱列：取表格行中首个含 @ 的单元格（列数不限定）；无邮箱的行自动跳过
  */
 import { App, TFile } from "obsidian";
 import { log } from "../utils/logger";
@@ -22,7 +21,7 @@ export function emptyContactBook(): ContactBook {
   return { byName: new Map(), byEmail: new Map(), groupNames: new Map(), groups: [] };
 }
 
-/** 解析通讯录 Markdown：按小节识别表格；「公共邮箱」小节为 名称|邮箱，其余为 姓名|邮箱（兼容 姓名|工号|邮箱） */
+/** 解析通讯录 Markdown：按小节识别表格；「公共邮箱」小节为 名称|邮箱，其余为 姓名|邮箱 */
 export function parseContactBook(text: string): ContactBook {
   const book = emptyContactBook();
   let heading = "";
@@ -43,7 +42,7 @@ export function parseContactBook(text: string): ContactBook {
       .filter((c, i, a) => !(i === 0 && c === "") && !(i === a.length - 1 && c === ""));
     if (cells.length < 2) continue;
     if (cells.every((c) => /^:?-{2,}:?$/.test(c))) continue; // 分隔行
-    if (cells.some((c) => /^(姓名|工号|名称|邮箱|序号)$/.test(c))) continue; // 表头
+    if (cells.some((c) => /^(姓名|名称|邮箱|序号)$/.test(c))) continue; // 表头
     if (/公共邮箱|抄送/.test(heading)) {
       // 「公共邮箱」/「抄送邮箱」小节：名称|邮箱 表（部门邮件组 → 默认抄送）
       const gName = cells[0]?.trim() ?? "";
@@ -53,7 +52,7 @@ export function parseContactBook(text: string): ContactBook {
       continue;
     }
     const name = cells[0]?.trim() ?? "";
-    // 邮箱列：首个含 @ 的单元格（两列即第二列；旧三列忽略工号列，不再按工号推导邮箱）
+    // 邮箱列：首个含 @ 的单元格（两列即第二列；列数不限定）
     const email = cells.slice(1).find((c) => c.includes("@"))?.trim() ?? "";
     if (email && name && name !== "待补充") {
       book.byName.set(name, email);
@@ -78,14 +77,13 @@ export function formatRecipient(email: string, book: ContactBook | null | undefi
 /**
  * 将「姓名 → 邮箱」追加到通讯录「全体名单」表。
  * - 只追加到「公共邮箱」小节之前出现的表格（全体名单）；
- * - 新格式表（姓名|邮箱）追加两列行；旧三列表（姓名|工号|邮箱）追加「姓名|待补充|邮箱」保持列对齐；
+ * - 追加两列行「姓名 | 邮箱」；
  * - 找不到表格（无表可追加）时原样返回，由调用方决定是否落盘。
  */
 export function appendContactToBook(text: string, name: string, email: string): string {
   const lines = text.split(/\r?\n/);
   let heading = "";
   let lastTableLine = -1;
-  let lastHeaderLine = -1; // 最近的表头行（用于判断列格式）
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     if (/^#{1,6}\s+/.test(line)) {
@@ -93,18 +91,10 @@ export function appendContactToBook(text: string, name: string, email: string): 
       continue;
     }
     if (/公共邮箱|抄送/.test(heading)) break; // 已进入「公共邮箱/抄送邮箱」小节：只追加到「全体名单/收件人名单」
-    if (line.startsWith("|")) {
-      lastTableLine = i;
-      if (line.split("|").some((c) => /^(姓名|工号|名称|邮箱|序号)$/.test(c.trim()))) lastHeaderLine = i;
-    }
+    if (line.startsWith("|")) lastTableLine = i;
   }
   if (lastTableLine === -1) return text; // 无表可追加
-  const hasIdCol = lastHeaderLine >= 0 && /工号/.test(lines[lastHeaderLine]);
-  lines.splice(
-    lastTableLine + 1,
-    0,
-    hasIdCol ? `| ${name.trim()} | 待补充 | ${email.trim()} |` : `| ${name.trim()} | ${email.trim()} |`
-  );
+  lines.splice(lastTableLine + 1, 0, `| ${name.trim()} | ${email.trim()} |`);
   return lines.join("\n");
 }
 

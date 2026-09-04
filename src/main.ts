@@ -109,11 +109,28 @@ export default class AIPMTool extends Plugin {
     return `${dir}/${RULES_FILE_NAME}`;
   }
 
+  /**
+   * 打开/聚焦项目总览（右侧栏，单实例）。
+   * Obsidian 1.7+ 视图延迟创建（defer views）：布局恢复的同类 leaf 可能 view 尚未实例化
+   * （leaf.view 为 null），只凭 instanceof 判断「不存在」会误走新建分支，导致右侧栏
+   * 出现重复的「项目总览」标签页。因此优先复用同类 leaf（视图缺失时重建到该 leaf 而非新建），
+   * 并清理多余同类标签，保证任意路径下右侧栏只有一个实例。
+   */
   async activateStatusView(): Promise<void> {
-    const existing = this.getStatusView();
-    if (existing) {
-      await this.app.workspace.revealLeaf(existing.leaf);
-      void existing.refresh();
+    const leaves = this.app.workspace.getLeavesOfType(STATUS_VIEW_TYPE);
+    const live = leaves.filter((l) => l.view instanceof StatusView);
+    const target = live[0] ?? leaves[0];
+    if (target) {
+      // 清理多余同类标签（含视图未实例化的残留 leaf），只保留 target
+      for (const extra of leaves) {
+        if (extra !== target) extra.detach();
+      }
+      if (!(target.view instanceof StatusView)) {
+        // 同类 leaf 已存在但视图未实例化（延迟创建/布局恢复残留）：重建到该 leaf，不新增标签
+        await target.setViewState({ type: STATUS_VIEW_TYPE, active: true });
+      }
+      await this.app.workspace.revealLeaf(target);
+      if (target.view instanceof StatusView) void target.view.refresh();
       return;
     }
     const leaf = this.app.workspace.getRightLeaf(false);
@@ -141,6 +158,12 @@ export default class AIPMTool extends Plugin {
     merged.attachmentTemplateDir =
       typeof merged.attachmentTemplateDir === "string" ? merged.attachmentTemplateDir : DEFAULT_SETTINGS.attachmentTemplateDir;
     merged.contactBookPath = typeof merged.contactBookPath === "string" ? merged.contactBookPath : "";
+    merged.requirementTemplatePath =
+      typeof merged.requirementTemplatePath === "string"
+        ? merged.requirementTemplatePath
+        : DEFAULT_SETTINGS.requirementTemplatePath;
+    merged.reviewSkillPath = typeof merged.reviewSkillPath === "string" ? merged.reviewSkillPath : "";
+    merged.contentSkillPath = typeof merged.contentSkillPath === "string" ? merged.contentSkillPath : "";
     merged.requirementDir = typeof merged.requirementDir === "string" ? merged.requirementDir : DEFAULT_SETTINGS.requirementDir;
     merged.currentUser = typeof merged.currentUser === "string" ? merged.currentUser : "";
     merged.maskSensitive = typeof merged.maskSensitive === "boolean" ? merged.maskSensitive : true;

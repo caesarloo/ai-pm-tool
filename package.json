@@ -1,6 +1,6 @@
 {
   "name": "ai-pm-tool",
-  "version": "0.0.5",
+  "version": "0.1.0",
   "private": true,
   "license": "MIT",
   "description": "Turn requirement notes into a live project overview: SVN snapshots, AI reminders, milestone tracking, and SMTP milestone emails",
@@ -10,7 +10,7 @@
     "build": "node esbuild.config.mjs production",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts,.mjs",
-    "test": "node tests/parser-smoke.mjs && node tests/frontmatter-smoke.mjs && node tests/contacts-smoke.mjs && node tests/rules-smoke.mjs && node tests/seed-smoke.mjs"
+    "test": "node tests/retry-smoke.mjs && node tests/parser-smoke.mjs && node tests/frontmatter-smoke.mjs && node tests/frontmatter2-smoke.mjs && node tests/contacts-smoke.mjs && node tests/rules-smoke.mjs && node tests/skill-smoke.mjs && node tests/seed-smoke.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -17,6 +17,12 @@ import { connect as netConnect } from "node:net";
 import { connect as tlsConnect, type ConnectionOptions } from "node:tls";
 import type { Duplex } from "node:stream";
 
+/** LLM 思考硬开关（全局默认）：true = 请求附 thinking:{"type":"disabled"}——
+ *  ⚠️ 2026-09 实测：SMB 网关未透传该参数（响应仍含 reasoning_content；同请求重试秒回缓存同 id），
+ *  当前网关下实际无效、无害保留（兼容未来支持/其它网关）；防截断靠 max_tokens 放大；
+ *  若网关 400 拒绝该字段，改回 false 移除 */
+const LLM_DISABLE_THINKING = true;
+
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string;
@@ -32,6 +38,13 @@ export interface ChatResult {
     cacheHitTokens?: number;
   };
   elapsedMs: number;
+}
+
+/** 上限探测结果（设置页「测试上限」）：可用输出上限（最后成功档位）+ 错误消息解析出的模型上下文上限（若有） */
+export interface OutputLimitProbe {
+  maxOutputTokens: number; // 实测可用的 max_tokens 档位（安全保守值）
+  contextTokens?: number; // 网关错误消息解析的模型上下文上限
+  note: string;
 }
 
 export class LlmError extends Error {
@@ -55,6 +68,15 @@ function parseProxyUrl(raw: string): { host: string; port: number } | null {
   const m = /^https?:\/\/([^:/]+)(?::(\d+))?/.exec(raw.trim());
   if (!m) return null;
   return { host: m[1], port: m[2] ? Number(m[2]) : 80 };
+}
+
+/** 从网关错误消息解析模型上下文上限（vllm/OpenAI 常见措辞），解析不到返回 undefined */
+function extractContextLimit(text: string): number | undefined {
+  const m =
+    /maximum\s+(?:context|model)\s+length\s+is\s+(\d+)/i.exec(text) ??
+    /max_model_len[^\d]{0,24}(\d+)/i.exec(text) ??
+    /(\d{4,})\s+tokens?/i.exec(text);
+  return m ? Number(m[1]) : undefined;
 }
 
 /** HTTPS 走 HTTP 代理（CONNECT 隧道）的 Agent：先连代理发 CONNECT，再 TLS 到目标 */
@@ -158,8 +180,115 @@ export class LLMGateway {
     return p ?? null;
   }
 
+  /** 探测指定 provider 的 max_tokens 可用上限（设置页「测试上限」按钮；与启用状态无关）：
+   *  小 prompt（"hi"）先试 32768 → 131072；32768 被拒则降档 8192 → 4096；
+   *  400 错误体按 vllm/OpenAI 常见措辞解析「模型上下文上限」一并返回；最多 4 次请求 */
+  async probeOutputLimit(provider: LLMProvider): Promise<OutputLimitProbe> {
+    if (!provider.baseUrl) throw new LlmError("模型地址未配置");
+    if (!provider.apiKey) throw new LlmError("未配置 API Key：请先在密钥栏填写");
+    const base = provider.baseUrl.trim().replace(/\/+$/, "");
+    if (!/^https?:\/\//i.test(base)) throw new LlmError("模型地址需以 http:// 或 https:// 开头");
+    const url = new URL(base + "/chat/completions");
+    const mode: "system" | "direct" | "custom" = this.settings.llmProxyMode ?? "system";
+    const proxy = mode === "custom" ? parseProxyUrl(this.settings.llmProxyUrl) : null;
+    if (mode === "custom" && !proxy) {
+      throw new LlmError("自定义代理地址无效：请填写形如 http://127.0.0.1:7897 的代理地址");
+    }
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${provider.apiKey}`,
+    };
+    if (mode !== "system") {
+      // Node 请求默认 UA 是 "node"，部分网关/WAF 会拦截；与 chat 同模拟浏览器 UA
+      headers["User-Agent"] =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+    }
+    const send = async (maxTokens: number): Promise<{ status: number; text: string }> => {
+      const body = JSON.stringify({
+        model: provider.model,
+        messages: [{ role: "user", content: "hi" }],
+        temperature: 0,
+        max_tokens: maxTokens,
+      });
+      if (mode === "system") {
+        let timer: number | undefined;
+        try {
+          const req = requestUrl({
+            url: url.href,
+            method: "POST",
+            contentType: "application/json",
+            headers,
+            body,
+            throw: false,
+          }).then((r) => ({ status: r.status, text: r.text }));
+          const timeout = new Promise<never>((_, reject) => {
+            timer = window.setTimeout(() => reject(new LlmError("探测请求超时（30s）")), 30000);
+          });
+          return await Promise.race([req, timeout]);
+        } finally {
+          if (timer !== undefined) window.clearTimeout(timer);
+        }
+      }
+      return requestWithNode(url, headers, body, proxy, 30000);
+    };
+    const tryStep = async (t: number): Promise<{ ok: true; status: number } | { ok: false; status: number; text: string }> => {
+      try {
+        const r = await send(t);
+        return r.status === 200 ? { ok: true, status: r.status } : { ok: false, status: r.status, text: r.text };
+      } catch (e) {
+        return { ok: false, status: 0, text: (e as Error).message };
+      }
+    };
+
+    // ① 连通性验证：512 对任何模型都远低于上限——失败即为地址/密钥/网络问题，先于上限试探报错（语义清晰）
+    const conn = await tryStep(512);
+    if (!conn.ok) {
+      const st = conn.status;
+      if (st === 401 || st === 403) {
+        throw new LlmError(`测试失败：认证错误（${st}）——API Key 无效或网关拒绝，请核对密钥后重试`, st);
+      }
+      if (st === 0) throw new LlmError(`测试失败（网络错误）：${conn.text}`);
+      throw new LlmError(`测试失败（HTTP ${st}）：${conn.text.slice(0, 160)}`, st);
+    }
+
+    // ① 升档：32768 可用则再试 131072（确认是否大上下文）
+    const hi = await tryStep(32768);
+    if (hi.ok) {
+      const hi2 = await tryStep(131072);
+      if (hi2.ok) return { maxOutputTokens: 131072, note: "131072 档可用（上限 ≥ 131072，远大于插件默认）" };
+      const c2 = extractContextLimit(hi2.text);
+      return {
+        maxOutputTokens: 32768,
+        contextTokens: c2,
+        note: c2 ? `131072 档被拒（模型上下文上限 ${c2.toLocaleString()}）→ 按 32768 保存` : "131072 档被拒 → 按 32768 保守保存",
+      };
+    }
+    // ② 降档确认：32768 被拒（超上下文）→ 8192 → 4096
+    const context = extractContextLimit(hi.text);
+    const mid = await tryStep(8192);
+    if (mid.ok) {
+      return {
+        maxOutputTokens: 8192,
+        contextTokens: context,
+        note: context ? `32768 被拒（模型上下文上限 ${context.toLocaleString()}）→ 8192 可用` : "32768 被拒 → 8192 档可用",
+      };
+    }
+    const low = await tryStep(4096);
+    if (low.ok) {
+      return {
+        maxOutputTokens: 4096,
+        contextTokens: context,
+        note: context ? `上限较紧（模型上下文 ${context.toLocaleString()}）→ 按 4096 保存` : "32768/8192 被拒 → 4096 档可用",
+      };
+    }
+    const tail = (hi.text || mid.text || low.text || "").slice(0, 160).replace(/\s+/g, " ");
+    throw new LlmError(
+      `上限探测失败：4096 档仍不可用${context ? `（错误提示上下文上限 ${context.toLocaleString()}）` : ""}${tail ? `——响应：${tail}` : "（请检查地址/密钥/模型名）"}`
+    );
+  }
+
   /** 调用当前启用模型（单选；无启用模型时抛错）；返回正文 + 用量 + 耗时 */
-  async chat(messages: ChatMessage[], opts: { temperature?: number; maxTokens?: number } = {}): Promise<ChatResult> {
+  async chat(messages: ChatMessage[], opts: { temperature?: number; maxTokens?: number; disableThinking?: boolean } = {}): Promise<ChatResult> {
     const provider = this.getActiveProvider();
     if (!provider) throw new LlmError("未启用任何模型：请在设置中启用一个「自定义模型」（单选）");
     if (!provider.baseUrl) throw new LlmError("模型地址未配置");
@@ -187,20 +316,32 @@ export class LLMGateway {
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
     }
 
-    const body = JSON.stringify({
+    const payload: Record<string, unknown> = {
       model: provider.model,
       messages: messages.map((m) =>
         this.settings.maskSensitive ? { ...m, content: maskSensitive(m.content) } : m
       ),
       temperature: opts.temperature ?? 0.3,
-      max_tokens: opts.maxTokens ?? 2000,
-    });
+      // 推理模型（DeepSeek-V4-Flash 等）的 reasoning_content 思考也计入 max_tokens，且思考长度不稳定
+      // （同描述曾 2000~2600 tokens，也曾 >4000 截断致 content 为空）：上限给 16384（实测该网关 ≥131072 可用），
+      // 思考自然收敛后 content 必有空间；也保证「重试=新请求」（请求体变化绕过网关同响应缓存）
+      max_tokens: opts.maxTokens ?? 16384,
+    };
+    const disableThinking = opts.disableThinking ?? LLM_DISABLE_THINKING;
+    if (disableThinking) {
+      // 关闭思考（DeepSeek 官方兼容参数 thinking:{type:"disabled"}）：默认全局硬编码生效；
+      // ⚠️ 实测 SMB 网关未透传（响应仍带 reasoning_content）——无害保留，兼容未来支持/其它网关；
+      // reasoning_effort（low/medium/high）实测同样无效已于 2026-09 移除；若网关 400 拒绝该字段，改常量 LLM_DISABLE_THINKING=false
+      payload.thinking = { type: "disabled" };
+    }
+    const body = JSON.stringify(payload);
 
     const t0 = Date.now();
     const modeName = mode === "system" ? "跟随系统代理" : mode === "direct" ? "直连无代理" : `自定义代理 ${proxy ? proxy.host + ":" + proxy.port : ""}`;
     log.debug(
       `LLM 请求开始：网络方式=${modeName} url=${urlForLog} model=${provider.model} 超时=60s` +
-        (provider.apiKey ? ` apiKey=${provider.apiKey.length}字符` : " apiKey=未配置")
+        (provider.apiKey ? ` apiKey=${provider.apiKey.length}字符` : " apiKey=未配置") +
+        (disableThinking ? " 思考=禁用" : " 思考=开启")
     );
 
     let res: { status: number; text: string };
@@ -268,10 +409,23 @@ export class LLMGateway {
     try {
       data = JSON.parse(res.text) as typeof data;
     } catch {
+      // 诊断日志：记录状态码/耗时/响应体长度与片段——用于区分「网关返回空 body」与「返回非 JSON 的错误页/提示」
+      log.warn(
+        `LLM 响应非 JSON：status=${res.status} 耗时=${Date.now() - t0}ms body长度=${res.text.length} 片段=${res.text.slice(0, 120).replace(/\s+/g, " ")}`
+      );
       throw new LlmError(`模型返回非 JSON 内容：${res.text.slice(0, 200)}`);
     }
     const text = data.choices?.[0]?.message?.content;
-    if (!text) throw new LlmError("模型返回内容为空");
+    if (!text) {
+      // 诊断日志：HTTP 200 但 content 缺失/为空（choices 结构异常或空 content）——
+      // 记录 body 片段与首个 message 的键清单：区分「真·空 content」与「内容在其它字段（reasoning 等）/结构变异」
+      const msg0 = data.choices?.[0]?.message;
+      const msgKeys = msg0 && typeof msg0 === "object" ? Object.keys(msg0).join(",") : "—";
+      log.warn(
+        `LLM 空响应：status=${res.status} 耗时=${Date.now() - t0}ms body长度=${res.text.length} choices=${data.choices?.length ?? 0} message键=${msgKeys} 片段=${res.text.slice(0, 300).replace(/\s+/g, " ")}`
+      );
+      throw new LlmError("模型返回内容为空");
+    }
     const elapsedMs = Date.now() - t0;
     const usage = data.usage
       ? {

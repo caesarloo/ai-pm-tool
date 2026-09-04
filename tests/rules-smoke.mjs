@@ -40,16 +40,9 @@ const SAMPLE = `# AI-PM-TOOL规则文件
 
 | 序号 | 环节 | frontmatter 邮件标志 | 可选 |
 | --- | --- | --- | --- |
-| 1 | 需求评审 | 需求评审邮件 | |
-| 2 | 工作量评估 | 工作量评估邮件 | |
-| 3 | 项目准入 | 项目准入邮件 | |
-| 4 | 测试案例评审 | 测试案例评审 | |
-| 5 | 上线审核 | 上线审核邮件 | |
-| 6 | 报备客服 | 报备客服邮件 | |
-| 7 | 生产验证 | 生产验证邮件 | |
-| 8 | 生产监控 | 生产监控邮件 | |
-| 9 | 商户接入文档评审 | 商户接入文档评审邮件 | ✅ 可选 |
-| 10 | 商户上线申请单评审 | 商户上线申请单评审邮件 | ✅ 可选 |
+| 1 | 环节一 | 环节一邮件 | |
+| 2 | 环节二 | 环节二邮件 | |
+| 3 | 环节三 | 环节三邮件 | ✅ 可选 |
 
 - 当前环节 = 第一个未完成节点。
 
@@ -114,9 +107,9 @@ const { parseRules, loadRules, builtinRules } = mod;
 // ===== 用例 =====
 console.log("1. 环节表解析（stages）");
 const rules = parseRules(SAMPLE);
-eq(rules.stages.length, 10, "环节数 10");
-eq(rules.stages[0], { key: "需求评审邮件", label: "需求评审", optional: false }, "首环节 key/label/optional");
-eq(rules.stages[8], { key: "商户接入文档评审邮件", label: "商户接入文档评审", optional: true }, "可选环节标记");
+eq(rules.stages.length, 3, "环节数 3（动态：以规则文件为准）");
+eq(rules.stages[0], { key: "环节一邮件", label: "环节一", optional: false }, "首环节 key/label/optional");
+eq(rules.stages[2], { key: "环节三邮件", label: "环节三", optional: true }, "可选环节标记");
 ok(!rules.stages[1].optional, "非可选环节 optional=false");
 
 console.log("2. 上下文区解析（context）");
@@ -143,14 +136,15 @@ eq(rules.readOnly.length, 3, "只读字段区 3 个");
 eq(rules.readOnly[0], { field: "预估工作量", source: "预估工作量" }, "预估工作量行");
 eq(rules.readOnly.map((f) => f.field), ["预估工作量", "需求归属", "功能点"], "只读区行序保持");
 
-console.log("5. 内置默认规则（规则文件缺失兜底）");
+console.log("5. 内置默认规则（规则文件缺失兜底：只保留 1 个通用环节 + 极简通用字段）");
 const builtin = builtinRules();
-eq(builtin.stages.length, 10, "内置环节数 10");
-eq(builtin.context.map((f) => f.field), ["项目名称", "负责人", "重点项目"], "内置上下文区字段");
-eq(builtin.form.length, 6, "内置表单区字段 6 项");
-eq(builtin.form.map((f) => f.source), ["项目状态", "需求状态", "进展说明", "计划上线日期", "需求评审日期", "开发投入日期"], "内置表单区来源");
-eq(builtin.readOnly.length, 13, "内置只读字段区 13 项");
-eq(builtin.readOnly[0], { field: "预估工作量", source: "预估工作量" }, "内置只读首项");
+eq(builtin.stages.length, 1, "内置环节数 1（不预设公司流程）");
+eq(builtin.stages[0], { key: "上线审核邮件", label: "上线审核", optional: false }, "兜底唯一环节：上线审核");
+eq(builtin.context.map((f) => f.field), ["项目名称", "负责人"], "内置上下文区字段（无重点项目）");
+eq(builtin.form.length, 4, "内置表单区字段 4 项（无需求评审/开发投入日期）");
+eq(builtin.form.map((f) => f.source), ["项目状态", "需求状态", "进展说明", "计划上线日期"], "内置表单区来源");
+eq(builtin.readOnly.length, 2, "内置只读字段区 2 项（极简）");
+eq(builtin.readOnly[0], { field: "需求背景简述", source: "需求背景简述" }, "内置只读首项");
 
 console.log("6. loadRules 路径语义（模板目录留空 / 文件缺失 → null）");
 const ruleStore = { "模板目录/01-AI-PM-TOOL规则文件.md": SAMPLE };
@@ -178,7 +172,7 @@ const fakeApp = {
   },
 };
 const r1 = await loadRules(fakeApp, "模板目录");
-ok(r1 !== null && r1.stages.length === 10 && r1.form.length === 6, "模板目录命中 → 载入规则");
+ok(r1 !== null && r1.stages.length === 3 && r1.form.length === 6, "模板目录命中 → 载入规则");
 const r2 = await loadRules(fakeApp, "");
 eq(r2, null, "模板目录留空 → null（不加载）");
 const r3 = await loadRules(fakeApp, "不存在的目录");

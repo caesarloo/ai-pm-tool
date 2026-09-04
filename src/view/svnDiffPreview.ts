@@ -30,7 +30,7 @@ export async function loadSvnDiff(app: App, notePath: string): Promise<SvnDiff |
 
 /**
  * 渲染「SVN 未提交变更」区到父容器（与项目进展弹窗完全一致的展示）
- * - frontmatter 判定：第一个内容以 `#` 开头的行（正文标题，如 `## 需求评审邮件`）之前的行视为 frontmatter；
+ * - frontmatter 判定：第一个内容以 `#` 开头的行（正文标题，如 `## 上线审核邮件`）之前的行视为 frontmatter；
  *   diff 中找不到标题行（纯 frontmatter 变更场景）时全部按正文处理（保留上下文）
  * - svnDiff 非空且有变更行 → 渲染，返回 true；无变更行 → 不渲染返回 false
  * - svnDiff 为 null 且 loaded → 渲染「未检测到 svn」提示，返回 false

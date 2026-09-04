@@ -12,15 +12,15 @@
  */
 import { App, TFile } from "obsidian";
 import { log } from "./utils/logger";
-import { MAIL_NODES, PROJECT_STATUSES, REQUEST_STATUSES } from "./types";
+import { PROJECT_STATUSES, REQUEST_STATUSES } from "./types";
 
 /** 规则文件在模板目录下的固定文件名 */
 export const RULES_FILE_NAME = "01-AI-PM-TOOL规则文件.md";
 
 /** 环节（对应 frontmatter 邮件标志） */
 export interface RuleStage {
-  key: string; // frontmatter 邮件标志键，如 需求评审邮件
-  label: string; // 环节展示名，如 需求评审
+  key: string; // frontmatter 邮件标志键，如 上线审核邮件
+  label: string; // 环节展示名，如 上线审核
   optional: boolean; // 可选环节
 }
 
@@ -225,37 +225,25 @@ export async function loadRules(app: App, templateDir: string): Promise<ProjectR
   }
 }
 
-/** 内置默认规则：规则文件缺失/未配置模板目录时的兜底（与历史硬编码行为一致） */
+/** 内置默认规则：规则文件缺失/未配置模板目录时的兜底。
+ *  只保留极简通用结构（1 个通用「上线审核」环节 + 通用字段），不预设公司流程、不预设业务字段；
+ *  具体环节与字段一律由规则文件「一、项目环节」/「二、项目进展」驱动 */
 export function builtinRules(): ProjectRules {
   return {
-    stages: MAIL_NODES.map((m) => ({ key: m.key, label: m.label, optional: !!m.optional })),
+    stages: [{ key: "上线审核邮件", label: "上线审核", optional: false }],
     context: [
       { field: "项目名称", source: "文件名", display: "链接（点击打开笔记）" },
       { field: "负责人", source: "项目经理 / 产品经理 / 技术经理 / 业务对接人", display: "角色人员合并展示" },
-      { field: "重点项目", source: "重点项目", display: "标注" },
     ],
     form: [
       { field: "项目状态", source: "项目状态", control: "select", values: [...PROJECT_STATUSES], style: "list" },
       { field: "需求状态", source: "需求状态", control: "select", values: [...REQUEST_STATUSES], style: "list" },
       { field: "进展说明", source: "进展说明", control: "textarea", values: [], style: "inline" },
       { field: "计划上线日期", source: "计划上线日期", control: "date", values: [], style: "inline" },
-      { field: "需求评审日期", source: "需求评审日期", control: "date", values: [], style: "inline" },
-      { field: "开发投入日期", source: "开发投入日期", control: "date", values: [], style: "inline" },
     ],
     readOnly: [
-      { field: "预估工作量", source: "预估工作量" },
-      { field: "需求归属", source: "需求归属" },
       { field: "需求背景简述", source: "需求背景简述" },
-      { field: "功能点", source: "功能点" },
-      { field: "价值分类", source: "价值分类" },
-      { field: "价值描述", source: "价值描述" },
-      { field: "优先级", source: "优先级" },
-      { field: "归属业务线", source: "归属业务线" },
-      { field: "备注", source: "备注" },
-      { field: "产研", source: "产研" },
       { field: "需求名称", source: "需求名称" },
-      { field: "需求编号", source: "需求编号" },
-      { field: "归属拆分人天", source: "归属拆分人天" },
     ],
   };
 }

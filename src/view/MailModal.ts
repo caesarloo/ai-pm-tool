@@ -16,7 +16,8 @@
  */
 import { App, Component, MarkdownRenderer, Modal, Notice, TFile } from "obsidian";
 import type AIPMTool from "../main";
-import { type MailNode, type RequirementNote } from "../types";
+import type { RequirementNote } from "../types";
+import type { RuleStage } from "../rules";
 import { loadContactBook, formatRecipient, appendContactToBook, type ContactBook } from "../notes/contacts";
 import { updateFrontmatter } from "./ProgressModal";
 import { SvnClient } from "@caesarloo/simple-svn-client";
@@ -133,7 +134,7 @@ export class MailModal extends Modal {
   onDone?: () => void; // 完成后回调（刷新进展弹窗）
   onCommitted?: () => void; // SVN 提交成功回调（刷新进展弹窗未提交变更，随后自动关闭）
 
-  private node: MailNode;
+  private node: RuleStage;
   private draft: Draft;
   private atts: AttItem[] = [];
   private hasGeneratedOnce = false; // 首次生成后保留用户附件（重新生成不清空）
@@ -157,8 +158,7 @@ export class MailModal extends Modal {
     this.note = note;
     // 环节由规则文件驱动（plugin.stages()）；索引越界回退首个环节
     const stages = plugin.stages();
-    const s = stages[nodeIndex] ?? stages[0];
-    this.node = { key: s?.key ?? "", label: s?.label ?? "", optional: s?.optional };
+    this.node = stages[nodeIndex] ?? stages[0] ?? { key: "", label: "", optional: false };
     this.onDone = onDone;
     this.onCommitted = onCommitted;
     this.draft = { subject: "", body: "", recipients: [], cc: [] };
@@ -239,7 +239,7 @@ export class MailModal extends Modal {
     this.tabGen.toggleClass("is-hidden", n !== 1);
     this.tabPreview.toggleClass("is-hidden", n !== 2);
     this.tabResult.toggleClass("is-hidden", n !== 3);
-    // 弹窗标题：环节 - 步骤（如 商户接入文档评审 - 预览确认）
+    // 弹窗标题：环节 - 步骤（如 <环节> - 预览确认）
     this.titleEl.setText(`${this.node.label} - ${STEP_DEFS[n - 1] ?? ""}`);
   }
 

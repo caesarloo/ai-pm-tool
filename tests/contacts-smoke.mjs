@@ -1,6 +1,6 @@
 /**
  * contacts 冒烟测试：通讯录解析（姓名/邮箱 索引 + 公共邮箱名称）+ 收件人「名称（邮箱）」展示格式
- * - 新格式：姓名|邮箱 两列；兼容旧版 姓名|工号|邮箱 三列（忽略工号列，不再按工号推导邮箱）
+ * - 通讯录解析：姓名|邮箱 两列（邮箱列取首个含 @ 单元格，列数不限定）+ 收件人「名称（邮箱）」展示格式
  * 运行：node tests/contacts-smoke.mjs（经 esbuild 打包后执行，见 package.json test 脚本）
  */
 import { build } from "esbuild";
@@ -87,7 +87,7 @@ ok(!book.byEmail.has("sunqi@example.com"), "「待补充」姓名不入 byEmail�
 eq(book.groups, ["project-group@example.com"], "公共邮箱列表");
 eq(book.groupNames.get("project-group@example.com"), "项目公共组", "公共邮箱 → 名称");
 eq(emptyContactBook().groups, [], "空通讯录结构完整");
-ok(book.byId === undefined, "不再有 工号 → 邮箱 索引（byId 已移除）");
+ok(book.byId === undefined, "不再有 byId 索引（已移除）");
 
 console.log("2. 收件人「名称（邮箱）」展示格式");
 eq(formatRecipient("zhangsan@example.com", book), "张三（zhangsan@example.com）", "个人：名称（邮箱）");
@@ -150,15 +150,15 @@ eq(parsedAfter.byName.get("孙七"), "sunqi7@example.com", "追加后可解析 �
 const noTable = appendContactToBook("## 通讯录\n\n没有表格的文档", "张三", "a@b.com");
 eq(noTable, "## 通讯录\n\n没有表格的文档", "无表格 → 原样返回不落盘");
 
-console.log("5. 旧三列格式兼容（姓名|工号|邮箱：忽略工号列，不再按工号推导邮箱）");
-const LEGACY = `# 通讯录名单
+console.log("5. 多列表格容错（邮箱列取首个含 @ 单元格；表头/无邮箱行跳过）");
+const MULTICOL = `# 通讯录名单
 
 ## 一、收件人名单
 
-| 姓名  | 工号       | 邮箱                  |
+| 姓名  | 备注       | 邮箱                  |
 | --- | -------- | ------------------- |
-| 周杰  | 04070344 | zhoujie@example.com |
-| 吴敏  | 10085332 | wumin@example.com  |
+| 周杰  | 内部编号 | zhoujie@example.com |
+| 吴敏  | 内部编号 | wumin@example.com  |
 
 ## 二、抄送邮箱
 
@@ -166,21 +166,21 @@ const LEGACY = `# 通讯录名单
 | -- | -- |
 | 产研组 | cy@example.com |
 `;
-const b6 = parseContactBook(LEGACY);
-eq(b6.byName.get("周杰"), "zhoujie@example.com", "三列旧格式 → 第三列邮箱正常解析（工号列忽略）");
+const b6 = parseContactBook(MULTICOL);
+eq(b6.byName.get("周杰"), "zhoujie@example.com", "多列表格 → 邮箱列正常解析（取首个含 @ 单元格）");
 eq(b6.groups, ["cy@example.com"], "「抄送邮箱」标题识别为公共邮箱列表");
 eq(b6.groupNames.get("cy@example.com"), "产研组", "抄送邮箱 → 名称");
 const b6b = parseContactBook(`## 收件人名单
 
-| 姓名 | 工号 | 邮箱 |
+| 姓名 | 备注 | 邮箱 |
 | --- | --- | --- |
-| 张三 | 10001 | |
+| 张三 | 内部编号 | |
 `);
-eq(b6b.byName.size, 0, "旧格式仅工号无邮箱 → 跳过（不再推导 工号@域名）");
-const appended2 = appendContactToBook(LEGACY, "孙七", "sunqi7@example.com");
-eq(appended2.includes("| 孙七 | 待补充 | sunqi7@example.com |"), true, "旧三列表 → 新行按三列追加（工号填待补充，保持列对齐）");
-const parsedLegacy = parseContactBook(appended2);
-eq(parsedLegacy.byName.get("孙七"), "sunqi7@example.com", "三列追加后 姓名 → 邮箱 正常解析");
+eq(b6b.byName.size, 0, "无邮箱行 → 跳过（不推导）");
+const appended2 = appendContactToBook(MULTICOL, "孙七", "sunqi7@example.com");
+eq(appended2.includes("| 孙七 | sunqi7@example.com |"), true, "多列表格追加 → 新行按两列追加");
+const parsedMulticol = parseContactBook(appended2);
+eq(parsedMulticol.byName.get("孙七"), "sunqi7@example.com", "追加后可解析 姓名 → 邮箱");
 
 rmSync(outDir, { recursive: true, force: true });
 console.log(`\n结果：${passed} 通过，${failed} 失败`);

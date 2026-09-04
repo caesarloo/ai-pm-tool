@@ -4,7 +4,7 @@
  * - frontmatter 为简化 YAML（支持 键:值 / 键: 列表 / 键: |- 多行块）
  * - 字段缺失容错：新格式 frontmatter（需求名称/需求编号、无项目状态）不报错，空值参与统计（§6.2 格式变体）
  */
-import { MAIL_NODES, STAKEHOLDER_ROLES } from "../types";
+import { STAKEHOLDER_ROLES } from "../types";
 import type { RequirementNote } from "../types";
 
 /** 从 Markdown 文本提取 frontmatter 区块（不含 --- 行），无则返回 null */
@@ -110,7 +110,7 @@ function booleanOf(v: unknown): boolean {
   return false;
 }
 
-export function parseRequirementNote(path: string, content: string): RequirementNote {
+export function parseRequirementNote(path: string, content: string, mailKeys: readonly string[] = []): RequirementNote {
   const raw = parseFrontmatter(content);
   const name = path.replace(/\.md$/i, "").split("/").pop() ?? path;
 
@@ -119,9 +119,10 @@ export function parseRequirementNote(path: string, content: string): Requirement
     roles[r] = list(raw[r]);
   }
 
+  // 邮件环节标志：仅按传入的当前环节键集读取（环节由规则文件动态驱动，不内置固定键表）
   const mailFlags: Record<string, boolean> = {};
-  for (const n of MAIL_NODES) {
-    mailFlags[n.key] = booleanOf(raw[n.key]);
+  for (const k of mailKeys) {
+    mailFlags[k] = booleanOf(raw[k]);
   }
 
   return {
@@ -144,4 +145,99 @@ export function parseRequirementNote(path: string, content: string): Requirement
 /** 判断是否为「需求名称/需求编号」新格式变体（§6.2 格式变体） */
 export function isNewFormatVariant(raw: Record<string, unknown>): boolean {
   return raw["需求名称"] !== undefined || raw["需求编号"] !== undefined;
+}
+
+// =====================================================================
+// frontmatter 序列化（P1 · 0.1.0 ✨ 生成需求：骨架全字段写回/预览提交）
+// - 键序与写入风格（列表/内联）以模板真实执行产物为准（scanFrontmatterLayout），
+//   序列化按原风格写回，模板更新自动跟随（不重复内置字段清单，设计 §2）
+// - 格式化细节与 ProgressModal.updateFrontmatter 共用（formatListValue/formatInlineValue）
+// =====================================================================
+
+/** 值 → 列表风格缩进行（多行值续行统一缩进两个空格；与 ProgressModal 内联实现一致，迁移共用） */
+export function formatListValue(value: string): string {
+  const cleaned = value.replace(/\r/g, "");
+  const parts = cleaned.split("\n");
+  return "\n" + parts.map((p, i) => (i === 0 ? `  - ${p}` : `  ${p}`)).join("\n");
+}
+
+/** 值 → 内联文本（单行 ` key: 值`；多行用 `|-` 块，仍是文本而非列表） */
+export function formatInlineValue(value: string): string {
+  const cleaned = value.replace(/\r/g, "");
+  if (!cleaned.includes("\n")) return ` ${cleaned}`;
+  const parts = cleaned.split("\n");
+  return ` |-\n` + parts.map((p) => `  ${p}`).join("\n");
+}
+
+/** 拆分为 frontmatter 块内文本 + 正文（frontmatter 缺失时 fm=""、body=原文）；正文去掉前导空行 */
+export function splitFrontmatter(content: string): { fm: string; body: string } {
+  const m = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---/.exec(content);
+  if (!m) return { fm: "", body: content };
+  return { fm: m[1], body: content.slice(m[0].length).replace(/^\r?\n+/, "") };
+}
+
+/**
+ * 扫描 frontmatter 块内文本的键序与写入风格（列表/内联）
+ * - 缩进行（列表项/块续行）跳过；`key:` 空值后跟 `- ` 项 → list；`[...]` 内联列表 → list
+ * - 用于「生成需求」预览提交：按模板真实执行产物的原风格序列化写回（模板更新自动跟随）
+ */
+export function scanFrontmatterLayout(fmText: string): { key: string; style: "list" | "inline" }[] {
+  const out: { key: string; style: "list" | "inline" }[] = [];
+  const lines = fmText.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^\s/.test(line)) continue; // 缩进行（列表项/块续行）
+    const m = /^([^:#][^:]*):\s*(.*)$/.exec(line);
+    if (!m) continue;
+    const key = m[1].trim();
+    const val = m[2].trim();
+    let style: "list" | "inline" = "inline";
+    if (val === "") {
+      // 空值：下一行是 `- ` 列表项 → list；`|>` 块指令 → inline（多行文本块）
+      const next = i + 1 < lines.length ? lines[i + 1] : "";
+      if (/^\s*-\s+/.test(next)) style = "list";
+    } else if (/^\[.*\]$/.test(val)) {
+      style = "list"; // 内联列表写法 [a, b]
+    } else if (/^[|>][+-]?\s*$/.test(val)) {
+      style = "inline"; // 多行文本块指令
+    }
+    out.push({ key, style });
+  }
+  return out;
+}
+
+/** 序列化 frontmatter 块内文本（按 layout 的键序与风格写回 values；模板默认即初值，人工/LLM 修改后原风格落地） */
+export function serializeFrontmatter(
+  layout: { key: string; style: "list" | "inline" }[],
+  values: Record<string, unknown>
+): string {
+  const singleLine = (s: string): string => s.replace(/\r?\n/g, " ").trim();
+  const rows: string[] = [];
+  for (const { key, style } of layout) {
+    const raw = values[key];
+    if (style === "list") {
+      const items = Array.isArray(raw)
+        ? raw.map(String)
+        : raw === null || raw === undefined || raw === ""
+          ? []
+          : [String(raw)];
+      rows.push(`${key}:`);
+      for (const it of items) rows.push(`  - ${singleLine(it)}`);
+    } else if (Array.isArray(raw)) {
+      // 内联键但值为列表（模板/人工改写过）：按列表块写出，YAML 语义一致
+      rows.push(`${key}:`);
+      for (const it of raw) rows.push(`  - ${singleLine(it)}`);
+    } else if (raw === null || raw === undefined || raw === "") {
+      rows.push(`${key}:`);
+    } else {
+      const s = String(raw);
+      if (s.includes("\n")) {
+        rows.push(`${key}: |-`);
+        for (const l of s.replace(/\r/g, "").split("\n")) rows.push(`  ${l}`);
+      } else {
+        rows.push(`${key}: ${s}`);
+      }
+    }
+  }
+  return rows.join("\n");
 }

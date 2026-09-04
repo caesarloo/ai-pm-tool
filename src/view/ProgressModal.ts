@@ -1,14 +1,16 @@
 /**
- * 进展更新（§4.5 主动录入）
- * - 从状态总览卡片点击进入，需求由上下文带入
- * - 项目环节时间轴（规则文件驱动：✅ 已完成 / ▶ 当前 / ○ 待进行）；当前节点可「✉️ 发起邮件」进入邮件引擎（§4.6）
- * - 表单（规则文件「可编辑」字段：控件/枚举/写入风格动态生成）→ 变更预览（旧→新）→「⬆️ 提交SVN」
- * - 纯人工录入，无 LLM 建议；写入 frontmatter 并 svn commit（§4.5）
+ * 项目进展面板（§4.5 主动录入）+ frontmatter 更新工具
+ * - 历史：进展更新弹窗（ProgressModal），P1 迭代后迁入「需求工作台」弹窗的「项目进展」页签
+ *   因此本文件保留为纯面板组件（ProgressPanel）+ 被 MailModal / 冒烟测试引用的 updateFrontmatter
+ * - ProgressPanel：从状态总览卡片/需求工作台进入，需求由上下文带入
+ *   - 项目环节时间轴（规则文件驱动：✅ 已完成 / ▶ 当前 / ○ 待进行）；当前节点可「✉️ 发起邮件」进入邮件引擎（§4.6）
+ *   - 表单（规则文件「可编辑」字段：控件/枚举/写入风格动态生成）→ 变更预览（旧→新）→「⬆️ 提交SVN」
+ *   - 纯人工录入，无 LLM 建议；写入 frontmatter 并 svn commit（§4.5）
  */
-import { App, Modal, Notice, Setting, TFile } from "obsidian";
+import { App, Notice, Setting, TFile } from "obsidian";
 import type AIPMTool from "../main";
 import { type RequirementNote } from "../types";
-import { parseRequirementNote } from "../notes/parser";
+import { parseRequirementNote, formatListValue, formatInlineValue } from "../notes/parser";
 import { SvnClient, type SvnDiff } from "@caesarloo/simple-svn-client";
 import { vaultBasePath } from "../utils/path";
 import { log } from "../utils/logger";
@@ -85,20 +87,8 @@ export function updateFrontmatter(content: string, key: string, value: string, s
   return lines.join("\n");
 }
 
-/** 值 → 列表风格缩进行（多行值续行统一缩进两个空格） */
-function formatListValue(value: string): string {
-  const cleaned = value.replace(/\r/g, "");
-  const parts = cleaned.split("\n");
-  return "\n" + parts.map((p, i) => (i === 0 ? `  - ${p}` : `  ${p}`)).join("\n");
-}
-
-/** 值 → 内联文本（单行 ` key: 值`；多行用 `|-` 块，仍是文本而非列表） */
-function formatInlineValue(value: string): string {
-  const cleaned = value.replace(/\r/g, "");
-  if (!cleaned.includes("\n")) return ` ${cleaned}`;
-  const parts = cleaned.split("\n");
-  return ` |-\n` + parts.map((p) => `  ${p}`).join("\n");
-}
+/** 值 → 列表风格缩进行 / 内联文本：已迁移至 notes/parser.ts（生成需求弹窗共用），此处仅 re-export 保持旧引用 */
+export { formatListValue, formatInlineValue };
 
 /** 读取正文「邮件发送时间」（§4.5 时间轴数据：邮件标志位 + 正文发送时间）；
  *  先定位本节点小节标题行，再在其后到下一个 `## ` 独立标题（或文末）的范围内匹配，避免跨节取到后续节点的时间 */
@@ -126,10 +116,19 @@ function readMailSendTime(content: string, nodeLabel: string): string | null {
   return tm ? tm[1].trim() : null;
 }
 
-export class ProgressModal extends Modal {
+/** 刷新时重新解析需求笔记（仅取邮件标志等轻量字段） */
+
+/**
+ * 项目进展面板（需求工作台「项目进展」页签 / 独立弹窗共用）
+ * - 不持有弹窗：由宿主 mount 到任意容器；提交成功后不关闭，原地刷新（邮件/进展可连续操作）
+ * - 宿主通过 onSubmitted（提交成功）与 onChange（邮件回写等磁盘变化）感知内容变化
+ */
+export class ProgressPanel {
   plugin: AIPMTool;
   note: RequirementNote;
-  onSubmitted?: () => void; // 提交成功后回调（如刷新状态总览）
+  onSubmitted?: () => void; // 提交成功后回调（宿主刷新总览 / 同步评审区）
+  private onChange?: () => void; // 邮件回写等外部写盘后回调（宿主同步评审区）
+  private root: HTMLElement | null = null; // 挂载容器（mount 后可用）
   /** 可编辑字段当前值（source → 值，由规则文件字段驱动） */
   private formValues = new Map<string, string>();
   private submitting = false;
@@ -138,8 +137,7 @@ export class ProgressModal extends Modal {
   private svnDiffSeq = 0; // diff 加载序号：并发加载时只保留最新请求的结果（丢弃过期覆盖）
   private mailNodeLabel = ""; // 最近发起邮件的节点名（完成提示展示具体环节）
 
-  constructor(app: App, plugin: AIPMTool, note: RequirementNote, onSubmitted?: () => void) {
-    super(app);
+  constructor(plugin: AIPMTool, note: RequirementNote, onSubmitted?: () => void) {
     this.plugin = plugin;
     this.note = note;
     this.onSubmitted = onSubmitted;
@@ -149,21 +147,24 @@ export class ProgressModal extends Modal {
     }
   }
 
-  onOpen(): void {
-    const { titleEl } = this;
-    titleEl.setText("✎ 项目进展");
-    this.contentEl.empty();
-    this.contentEl.addClass("ai-pm-progress");
-    // 弹窗加宽（Modal 非侧边栏，可容纳时间轴与表单）
-    this.modalEl.addClass("ai-pm-modal-wide");
+  /** 挂载到宿主容器并渲染（宿主负责容器样式与可见性） */
+  mount(container: HTMLElement): void {
+    this.root = container;
+    container.addClass("ai-pm-progress");
     void this.renderAsync();
   }
 
-  /** 渲染代次：refreshNote 触发新一轮渲染时，旧一轮未完成的渲染不再继续 append（防重复 DOM） */
+  /** 注册磁盘变化回调（宿主同步评审区字段） */
+  setOnChange(fn: () => void): void {
+    this.onChange = fn;
+  }
+
+  /** 渲染代次：refresh 触发新一轮渲染时，旧一轮未完成的渲染不再继续 append（防重复 DOM） */
   private renderSeq = 0;
 
   /** 每次打开先重读规则文件（修改即时生效），再渲染四个展示区域 */
   private async renderAsync(): Promise<void> {
+    if (!this.root) return;
     const seq = ++this.renderSeq;
     try {
       await this.plugin.loadRulesOnce();
@@ -172,8 +173,8 @@ export class ProgressModal extends Modal {
       this.plugin.rules = null;
     }
     if (seq !== this.renderSeq) return; // 已被更新的渲染取代：丢弃
-    this.contentEl.empty(); // 防重入：刷新时清空旧内容
-    const contentEl = this.contentEl;
+    this.root.empty(); // 防重入：刷新时清空旧内容
+    const contentEl = this.root;
     const rules = this.plugin.rulesOrBuiltin();
     const rolesText = Object.entries(this.note.roles)
       .filter(([, v]) => v.length > 0)
@@ -225,8 +226,8 @@ export class ProgressModal extends Modal {
         const btn = st.createEl("button", { cls: "ai-pm-st-btn", text: "✉️ 发起邮件" });
         btn.addEventListener("click", () => {
           this.mailNodeLabel = m.label;
-          // onDone：邮件回写后刷新弹窗；onCommitted：邮件页 SVN 提交成功后重新加载未提交变更（提交后自动关闭返回本弹窗）
-          new MailModal(this.app, this.plugin, this.note, i, () => void this.refreshNote(), () => this.refreshSvnDiff()).open();
+          // onDone：邮件回写后刷新本面板；onCommitted：邮件页 SVN 提交成功后重新加载未提交变更（提交后自动关闭返回本面板）
+          new MailModal(this.app, this.plugin, this.note, i, () => void this.refreshAfterMail(), () => this.refreshSvnDiff()).open();
         });
       } else {
         st.createSpan({ cls: "ai-pm-st-date", text: "○" });
@@ -291,13 +292,17 @@ export class ProgressModal extends Modal {
     this.previewEl = preview.createDiv({ cls: "ai-pm-preview-rows" });
     this.renderPreview();
 
-    // ===== 底部按钮（关闭走右上角 ✕，与「返回/取消」行为相同，避免重复） =====
+    // ===== 底部按钮（关闭走宿主 ✕ 或页签切换，不提供重复关闭入口） =====
     const foot = contentEl.createDiv({ cls: "ai-pm-modal-foot" });
     const submit = foot.createEl("button", { cls: "ai-pm-btn primary", text: "⬆️ 提交SVN" });
     submit.addEventListener("click", () => void this.submit());
 
     // 异步加载 SVN 未提交变更（svn diff），预览展示真实差异
     void this.loadSvnDiff();
+  }
+
+  private get app(): App {
+    return this.plugin.app;
   }
 
   /** 加载 SVN 未提交变更（svn diff 工作副本 vs BASE），预览展示真实差异；svn 不可用时提示 */
@@ -373,7 +378,28 @@ export class ProgressModal extends Modal {
     });
   }
 
-  /** 提交：写入 frontmatter → svn commit（§4.5） */
+  /** 从磁盘重读笔记并整面板刷新（提交成功 / 邮件回写后调用）：全量替换 note 与表单值，变更预览回到干净基线 */
+  async refreshFromDisk(): Promise<void> {
+    const file = this.app.vault.getAbstractFileByPath(this.note.path);
+    if (!(file instanceof TFile)) return;
+    this.svnDiff = null;
+    this.svnDiffLoaded = false;
+    try {
+      const content = await this.app.vault.read(file);
+      const fresh = parseRequirementNote(this.note.path, content, this.plugin.stages().map((s) => s.key));
+      this.note = fresh;
+      // 表单值同步为磁盘现值（提交/邮件回写后不再显示残留差异）
+      for (const f of this.plugin.rulesOrBuiltin().form) {
+        this.formValues.set(f.source, rawValue(fresh, f.source));
+      }
+    } catch (e) {
+      log.warn(`进展面板重读笔记失败：${(e as Error).message}`);
+      return;
+    }
+    await this.renderAsync();
+  }
+
+  /** 提交：写入 frontmatter → svn commit（§4.5）；成功后不关闭，原地刷新（宿主经 onSubmitted 感知） */
   private async submit(): Promise<void> {
     if (this.submitting) return;
     this.submitting = true;
@@ -414,7 +440,7 @@ export class ProgressModal extends Modal {
         new Notice("笔记已写入；本机未检测到 SVN 命令，未提交 SVN（需在装有 SVN 的主机运行）", 8000);
       }
       this.onSubmitted?.();
-      this.close();
+      await this.refreshFromDisk();
     } catch (e) {
       log.error("进展提交异常", e);
       new Notice(`提交失败：${(e as Error).message}`, 8000);
@@ -423,45 +449,10 @@ export class ProgressModal extends Modal {
     }
   }
 
-  /** 邮件发送回写后刷新本弹窗（节点标志、时间轴、当前环节变化；SVN 变更预览重新加载） */
-  private async refreshNote(): Promise<void> {
-    const file = this.app.vault.getAbstractFileByPath(this.note.path);
-    if (!(file instanceof TFile)) return;
-    try {
-      const content = await this.app.vault.read(file);
-      this.note = { ...this.note, ...pickFresh(this.note.path, content) };
-      // 邮件回写产生了新的未提交变更：清除 svn diff 缓存，重绘时重新加载（否则预览停留在打开时的旧 diff）
-      this.svnDiff = null;
-      this.svnDiffLoaded = false;
-      // 重绘当前视图（renderAsync 内部有代次守卫 + empty，防并发渲染重复 DOM）
-      void this.renderAsync();
-      new Notice(`「${this.mailNodeLabel}」邮件已完成，环节已推进`, 3000);
-    } catch (e) {
-      log.warn(`邮件后刷新进展失败：${(e as Error).message}`);
-    }
+  /** 邮件发送回写后刷新本面板（节点标志、时间轴、当前环节变化；SVN 变更预览重新加载） */
+  private async refreshAfterMail(): Promise<void> {
+    await this.refreshFromDisk();
+    new Notice(`「${this.mailNodeLabel}」邮件已完成，环节已推进`, 3000);
+    this.onChange?.();
   }
-
-  onClose(): void {
-    this.contentEl.empty();
-  }
-}
-
-/** 刷新时重新解析需求笔记（仅取邮件标志等轻量字段） */
-function pickFresh(
-  path: string,
-  content: string
-): Pick<
-  RequirementNote,
-  "mailFlags" | "projectStatus" | "progress" | "planOnlineDate" | "requestStatus" | "reviewDate" | "devStartDate"
-> {
-  const fresh = parseRequirementNote(path, content);
-  return {
-    mailFlags: fresh.mailFlags,
-    projectStatus: fresh.projectStatus,
-    progress: fresh.progress,
-    planOnlineDate: fresh.planOnlineDate,
-    requestStatus: fresh.requestStatus,
-    reviewDate: fresh.reviewDate,
-    devStartDate: fresh.devStartDate,
-  };
 }

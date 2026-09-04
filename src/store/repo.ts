@@ -36,8 +36,14 @@ async function readNote(app: App, file: TFile, useDisk: boolean): Promise<string
   }
 }
 
-/** 按目录前缀扫描并解析需求笔记（并行读取，避免串行卡顿）；解析失败静默跳过并合并提示，避免批量刷屏 */
-export async function scanRequirementNotes(app: App, dir: string, useDisk = false): Promise<RequirementNote[]> {
+/** 按目录前缀扫描并解析需求笔记（并行读取，避免串行卡顿）；解析失败静默跳过并合并提示，避免批量刷屏
+ *  mailKeys：当前动态环节键集（parseRequirementNote 的邮件标志读取范围；缺省不解析邮件标志） */
+export async function scanRequirementNotes(
+  app: App,
+  dir: string,
+  useDisk = false,
+  mailKeys: readonly string[] = []
+): Promise<RequirementNote[]> {
   const prefix = dir.replace(/^\/+|\/+$/g, "");
   // 仅枚举配置目录（Obsidian 审核合规：不走 vault.getFiles() 全库枚举）
   const files = (
@@ -53,7 +59,7 @@ export async function scanRequirementNotes(app: App, dir: string, useDisk = fals
       try {
         const content = await readNote(app, f, useDisk);
         if (content === null) return null; // 读取失败/文件不存在：跳过
-        return parseRequirementNote(f.path, content);
+        return parseRequirementNote(f.path, content, mailKeys);
       } catch (e) {
         failed++;
         log.warn(`解析失败：${f.path}`, e);

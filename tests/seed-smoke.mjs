@@ -1,7 +1,7 @@
 /**
  * seed 冒烟测试：极简模板/规则种子内容解析 + 缺失检测 + 幂等生成
  * 运行：node tests/seed-smoke.mjs（经 esbuild 打包后执行，见 package.json test 脚本）
- * 覆盖：规则文件（2 环节 4 区域）、示例需求笔记、通讯录示例、邮件模板示例、checkSeedMissing、ensureMinimalSetup 幂等
+ * 覆盖：规则文件（1 环节 4 区域）、示例需求笔记、通讯录示例、邮件模板示例、checkSeedMissing、ensureMinimalSetup 幂等
  */
 import { build } from "esbuild";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -73,7 +73,7 @@ const { ensureMinimalSetup, checkSeedMissing, SEED_RULES_FILE, SEED_MAIL_TEMPLAT
 console.log("1. 极简规则文件解析（1 环节 / 4 区域）");
 const rules = parseRules(SEED_RULES_FILE);
 eq(rules.stages.length, 1, "环节数 1（极简）");
-eq(rules.stages[0], { key: "需求评审邮件", label: "需求评审", optional: false }, "唯一环节：需求评审");
+eq(rules.stages[0], { key: "上线审核邮件", label: "上线审核", optional: false }, "唯一环节：上线审核（与内置兜底一致）");
 eq(rules.context.length, 3, "上下文区 3 个字段");
 eq(rules.context.map((f) => f.field), ["项目名称", "负责人", "重点项目"], "上下文区行序");
 eq(rules.form.length, 3, "表单区 3 个字段（极简）");
@@ -90,7 +90,7 @@ eq(rules.readOnly.length, 3, "只读字段区 3 个（极简）");
 eq(rules.readOnly.map((f) => f.field), ["预估工作量", "需求背景简述", "功能点"], "只读区行序");
 
 console.log("2. 示例需求笔记解析（frontmatter → RequirementNote）");
-const note = parseRequirementNote("AI-PM-TOOL/需求笔记/示例需求.md", SEED_SAMPLE_NOTE);
+const note = parseRequirementNote("AI-PM-TOOL/需求笔记/示例需求.md", SEED_SAMPLE_NOTE, ["上线审核邮件"]);
 eq(note.name, "示例需求", "笔记名");
 eq(note.projectStatus, "进行中", "项目状态");
 eq(note.requestStatus, "已评审通过", "需求状态");
@@ -98,10 +98,9 @@ eq(note.roles["项目经理"], ["张三"], "项目经理角色（列表风格）
 eq(note.roles["产品经理"], ["李四"], "产品经理角色");
 eq(note.effort, "5 人天", "预估工作量");
 eq(note.planOnlineDate, "2026-06-30", "计划上线日期");
-eq(note.mailFlags["需求评审邮件"], false, "需求评审邮件标志 false");
-ok(note.mailFlags["上线审核邮件"] === false, "未配置环节标志默认 false（解析兜底）");
+eq(note.mailFlags["上线审核邮件"], false, "上线审核邮件标志 false");
 ok(note.keyProject === false, "重点项目 false");
-ok((note.progress ?? "").includes("需求评审"), "进展说明内容");
+ok((note.progress ?? "").includes("上线审核"), "进展说明内容");
 
 console.log("3. 通讯录示例解析（收件人名单/抄送名单 + 公共邮箱）");
 const book = parseContactBook(SEED_CONTACT_BOOK);
@@ -109,11 +108,11 @@ eq(book.byName.get("张三"), "zhangsan@example.com", "张三 → 邮箱");
 eq(book.byName.get("李四"), "lisi@example.com", "李四 → 邮箱");
 eq(book.groups, ["project@example.com"], "抄送名单（默认抄送）");
 eq(book.groupNames.get("project@example.com"), "项目组", "抄送名单名称");
-ok(book.byId === undefined, "无工号索引（格式已简化为姓名/邮箱）");
+ok(book.byId === undefined, "无 byId 索引（格式已简化为姓名/邮箱）");
 
 console.log("4. 邮件模板示例解析（## 主题 / ## 正文）");
 const tpl = parseMailTemplate(SEED_MAIL_TEMPLATE);
-ok(tpl.subject.includes("需求评审") && tpl.subject.includes("[项目名称]"), "主题小节含占位符");
+ok(tpl.subject.includes("上线审核") && tpl.subject.includes("[项目名称]"), "主题小节含占位符");
 ok(tpl.body.includes("各位好") && tpl.body.includes("[项目名称]"), "正文小节含占位符");
 ok(!tpl.body.includes("## 主题"), "正文不吞并其他小节");
 
@@ -162,7 +161,7 @@ eq(s.attachmentTemplateDir, "AI-PM-TOOL", "模板目录 → AI-PM-TOOL");
 eq(s.contactBookPath, "AI-PM-TOOL/通讯录名单.md", "通讯录路径 → 种子文件");
 eq(s.requirementDir, "AI-PM-TOOL/需求笔记", "需求目录 → 种子目录");
 ok(store.has("AI-PM-TOOL/01-AI-PM-TOOL规则文件.md"), "规则文件已创建");
-ok(store.has("AI-PM-TOOL/邮件模板/01-需求评审邮件.md"), "邮件模板已创建");
+ok(store.has("AI-PM-TOOL/邮件模板/01-上线审核邮件.md"), "邮件模板已创建");
 ok(store.has("AI-PM-TOOL/需求笔记/示例需求.md"), "示例需求笔记已创建");
 ok(store.has("AI-PM-TOOL/通讯录名单.md") && store.has("AI-PM-TOOL/00-README.md"), "通讯录 + README 已创建");
 

@@ -12,7 +12,7 @@ import { runSync, SvnClient, isSvnWorkingCopy } from "@caesarloo/simple-svn-clie
 import { aggregateStatus, filterByStatus, isApproved, isRejected, ownedByMe, scanRequirementNotes, searchNotes } from "../store/repo";
 import { vaultBasePath } from "../utils/path";
 import { log } from "../utils/logger";
-import { ProgressModal } from "./ProgressModal";
+import { RequirementCreateModal } from "./RequirementCreateModal";
 import { checkSeedMissing } from "../setup/seed";
 import { runSvnSerialized } from "../utils/svnQueue";
 
@@ -114,7 +114,12 @@ export class StatusView extends ItemView {
     // 重读规则文件（环节/字段修改即时生效）
     await this.plugin.loadRulesOnce();
     log.debug(`刷新状态总览，目录=${this.plugin.settings.requirementDir}`);
-    this.notes = await scanRequirementNotes(this.app, this.plugin.settings.requirementDir);
+    this.notes = await scanRequirementNotes(
+      this.app,
+      this.plugin.settings.requirementDir,
+      false,
+      this.plugin.stages().map((s) => s.key)
+    );
     // 快照信息：尽力读取 SVN 版本号（非同步目录则显示提示）
     if (!this.snapshot) {
       const base = vaultBasePath(this.app);
@@ -157,7 +162,12 @@ export class StatusView extends ItemView {
         this.changes = result.changes;
         new Notice(result.message, 5000);
         // 同步后重新扫描数据（动态原则：统计随实际数据变化；SVN 已更新磁盘，直读避免 vault 缓存滞后）
-        this.notes = await scanRequirementNotes(this.app, this.plugin.settings.requirementDir, true);
+        this.notes = await scanRequirementNotes(
+          this.app,
+          this.plugin.settings.requirementDir,
+          true,
+          this.plugin.stages().map((s) => s.key)
+        );
         this.changelogVisible = true;
         this.changelogExpanded = true; // 默认展开
       }
@@ -224,8 +234,15 @@ export class StatusView extends ItemView {
 
     // ===== 头部 =====
     const header = contentEl.createDiv({ cls: "ai-pm-header" });
-    header.createSpan({ text: "📋 项目总览", cls: "ai-pm-header-title" });
-    header.createSpan({ text: `需求 · ${this.notes.length} 项`, cls: "ai-pm-header-count" });
+    const headLeft = header.createDiv({ cls: "ai-pm-header-left" });
+    headLeft.createSpan({ text: "📋 项目总览", cls: "ai-pm-header-title" });
+    headLeft.createSpan({ text: `需求 · ${this.notes.length} 项`, cls: "ai-pm-header-count" });
+    // ✨ 新增需求（P1 · 0.1.0）：唯一入口（无命令面板命令，已确认）；创建成功刷新总览
+    const genBtn = header.createEl("button", { cls: "ai-pm-req-top-btn", text: "✨ 新增需求" });
+    genBtn.title = "打开新增需求：描述需求后，LLM 自动生成文件名与字段（骨架加填充加内容审核）";
+    genBtn.addEventListener("click", () => {
+      new RequirementCreateModal(this.app, this.plugin, { onDone: () => void this.refresh() }).open();
+    });
 
     // ===== 搜索（§4.3） =====
     const search = contentEl.createEl("input", {
@@ -399,7 +416,8 @@ export class StatusView extends ItemView {
         }
       }
       card.addEventListener("click", () => {
-        new ProgressModal(this.app, this.plugin, n, () => void this.refresh()).open();
+        // 需求工作台：默认项目进展（环节 / 邮件 / 进展提交）；标题行右侧「进入编辑」全字段 + SKILL 审核
+        new RequirementCreateModal(this.app, this.plugin, { note: n, onDone: () => void this.refresh() }).open();
       });
     }
   }

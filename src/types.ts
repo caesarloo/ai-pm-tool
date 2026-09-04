@@ -24,22 +24,6 @@ export const REQUEST_STATUSES = [
 ] as const;
 export type RequestStatus = (typeof REQUEST_STATUSES)[number];
 
-/** 10 个邮件节点（frontmatter 标志位，来自产品需求模板）
- * 顺序：测试案例评审在项目准入之后、上线审核之前一步（2026-08 调整） */
-export type MailNode = { key: string; label: string; optional?: boolean };
-export const MAIL_NODES: readonly MailNode[] = [
-  { key: "需求评审邮件", label: "需求评审" },
-  { key: "工作量评估邮件", label: "工作量评估" },
-  { key: "项目准入邮件", label: "项目准入（开发准入）" },
-  { key: "测试案例评审", label: "测试案例评审" },
-  { key: "上线审核邮件", label: "上线审核" },
-  { key: "报备客服邮件", label: "报备客服" },
-  { key: "生产验证邮件", label: "生产验证" },
-  { key: "生产监控邮件", label: "生产监控" },
-  { key: "商户接入文档评审邮件", label: "商户接入文档评审", optional: true },
-  { key: "商户上线申请单评审邮件", label: "商户上线申请单评审", optional: true },
-];
-
 /** 干系人角色字段（收件人自动提取，§4.6） */
 export const STAKEHOLDER_ROLES = [
   "项目经理",
@@ -61,7 +45,7 @@ export interface RequirementNote {
   planOnlineDate: string | null; // 计划上线日期
   progress: string | null; // 进展说明
   keyProject: boolean; // 重点项目
-  mailFlags: Record<string, boolean>; // 10 个邮件标志
+  mailFlags: Record<string, boolean>; // 邮件环节标志（键集 = 当前动态环节 stages 的 key）
   raw: Record<string, unknown>; // 原始 frontmatter
 }
 
@@ -92,18 +76,32 @@ export interface LLMProvider {
   baseUrl: string; // OpenAI 兼容地址，如 http://10.x.x.x:8000/v1
   model: string; // 模型名
   apiKey?: string; // 密钥，本地保存
+  /** 实测可用的 max_tokens 上限（设置页「测试上限」探测结果保存于此；未测 = 插件用内置安全默认 4000/6000） */
+  maxOutputTokens?: number;
 }
 
 /** 插件设置（§5 / §6 附件模板目录） */
 export interface AIPMSettings {
   llmProviders: LLMProvider[];
   activeProviderId: string | null; // 单选启用
-  // 附件模板目录（§6）；留空 = 不使用邮件模板（LLM 生成或通用草稿）
-  attachmentTemplateDir: string; // 默认 邮件附件模板
-  // 通讯录名单路径（vault 相对路径；留空 = 不加载通讯录、不做邮箱匹配）
+  // 附件模板目录（§6）；默认空 = 未配置：不使用邮件模板（LLM 生成或通用草稿）、不加载规则文件（视图用内置默认）
+  attachmentTemplateDir: string;
+  // 通讯录名单路径（vault 相对路径；默认空 = 不加载通讯录、不做邮箱匹配）
   contactBookPath: string;
-  // 仓库目录约定（§4.1）；留空 = 总览为空并在视图中提示选择目录
-  requirementDir: string; // 默认 产品需求
+  // ✨ 新增需求（P1 · 0.1.0）：
+  // 需求笔记模板路径（vault 相对路径；默认空 = 未配置：预检提示先配置；
+  // 「✨ 新增需求」用 Templater 真实执行该模板生成骨架：
+  // frontmatter 全字段/默认值 + 模板日期计算 + 正文邮件小节——模板更新自动跟随，插件不重复内置字段清单）
+  requirementTemplatePath: string; // 需求笔记模板（vault 相对路径）
+  // 需求审核 SKILL 路径（vault 文件；读取后仅提取审核章节作三项校验（预期价值/需求名称/业务分类）上下文；
+  // 留空 = 不做内容审核；缺失/不可用时自动跳过且不阻塞创建）
+  reviewSkillPath: string;
+  // 需求内容生成 SKILL 路径（vault 文件，公司口径的需求内容生成规则；
+  // 「✨ 新增需求」LLM 生成文件名与字段的规则源（财务编码 + 公司产品线/部门映射 + 重点项目清单）；
+  // 留空 = 无公司口径：命名用通用三段式说明、名称/列表 R 校验跳过（不回退审核 SKILL 数据）；审核仍由 reviewSkillPath 负责）
+  contentSkillPath: string;
+  // 仓库目录约定（§4.1）；默认空 = 未配置：总览为空并在视图中提示选择目录
+  requirementDir: string;
   // 脱敏（§5）
   maskSensitive: boolean; // 默认 true
   // 网络方式（§5 LLM 请求）：跟随系统代理 / 直连无代理 / 自定义代理
@@ -127,9 +125,13 @@ export interface AIPMSettings {
 export const DEFAULT_SETTINGS: AIPMSettings = {
   llmProviders: [],
   activeProviderId: null,
-  attachmentTemplateDir: "邮件附件模板",
+  // 路径类设置默认空（未配置）：不预设任何 vault 路径，对应功能在未配置时直接跳过/提示
+  attachmentTemplateDir: "",
   contactBookPath: "",
-  requirementDir: "产品需求",
+  requirementTemplatePath: "",
+  reviewSkillPath: "",
+  contentSkillPath: "",
+  requirementDir: "",
   maskSensitive: true,
   llmProxyMode: "system",
   llmProxyUrl: "",

@@ -9,14 +9,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-// ===== 通用样例（frontmatter 结构示例；业务内容完全虚构） =====
+// ===== 通用样例（frontmatter 结构示例；内容为中性占位，邮件环节键按当前动态环节键集） =====
 const SAMPLE_REQ = `---
-需求名称: 订单导出性能优化
+需求名称: 示例需求甲
 需求编号: 2026-001
-需求背景简述: 导出功能在数据量增大后响应超时
+需求背景简述: 现状为逐条人工处理，量大易错，需要自动化改造
 功能点:
-  - 分页导出
-  - 异步任务通知
+  - 功能点一
+  - 功能点二
 预估工作量: 43人天
 需求评审日期: 2026-07-21
 需求状态: 已评审通过
@@ -25,24 +25,18 @@ const SAMPLE_REQ = `---
 项目状态: 进行中
 重点项目: true
 已批准: false
-进展说明: 接口改造完成 80%
+进展说明: 示例进展：已推进到第二阶段
 项目经理: 张三
 产品经理: 王五
 技术经理: 赵六
 业务对接人: 李四
-需求评审邮件: true
-工作量评估邮件: true
-项目准入邮件: true
-上线审核邮件: false
-报备客服邮件: false
-生产验证邮件: false
-生产监控邮件: false
-商户接入文档评审邮件: false
-商户上线申请单评审邮件: false
-测试案例评审: false
+环节一邮件: true
+环节二邮件: true
+环节三邮件: false
+环节四邮件: false
 ---
 
-# 订单导出性能优化
+# 示例需求甲
 正文…
 `;
 
@@ -102,22 +96,23 @@ ok(extractFrontmatterBlock(SAMPLE_REQ) !== null, "需求笔记含 frontmatter");
 ok(extractFrontmatterBlock(SAMPLE_EMPTY) === null, "无 frontmatter 返回 null");
 
 console.log("2. 需求笔记解析");
-const req = parseRequirementNote("产品需求/订单导出性能优化.md", SAMPLE_REQ);
-eq(req.name, "订单导出性能优化", "笔记名（去 .md）");
+const MAIL_KEYS = ["环节一邮件", "环节二邮件", "环节三邮件", "环节四邮件"];
+const req = parseRequirementNote("产品需求/示例需求甲.md", SAMPLE_REQ, MAIL_KEYS);
+eq(req.name, "示例需求甲", "笔记名（去 .md）");
 eq(req.requestStatus, "已评审通过", "需求状态");
 eq(req.projectStatus, "进行中", "项目状态");
 eq(req.effort, "43人天", "预估工作量");
 eq(req.reviewDate, "2026-07-21", "需求评审日期");
 eq(req.devStartDate, "2026-08-01", "开发投入日期");
 eq(req.planOnlineDate, "2026-08-25", "计划上线日期");
-eq(req.progress, "接口改造完成 80%", "进展说明");
+eq(req.progress, "示例进展：已推进到第二阶段", "进展说明");
 eq(req.keyProject, true, "重点项目");
 eq(req.roles["项目经理"], ["张三"], "项目经理角色");
 eq(req.roles["产品经理"], ["王五"], "产品经理角色");
 eq(req.roles["技术经理"], ["赵六"], "技术经理角色");
-eq(req.mailFlags["需求评审邮件"], true, "需求评审邮件标志 true");
-eq(req.mailFlags["上线审核邮件"], false, "上线审核邮件标志 false");
-eq(req.mailFlags["测试案例评审"], false, "测试案例评审标志 false");
+eq(req.mailFlags["环节一邮件"], true, "环节一邮件标志 true");
+eq(req.mailFlags["环节三邮件"], false, "环节三邮件标志 false");
+eq(Object.keys(req.mailFlags).length, 4, "邮件标志只按传入环节键集读取");
 
 console.log("3. 新格式变体容错");
 const nf = parseRequirementNote("产品需求/新格式需求.md", SAMPLE_NEWFORMAT);
@@ -130,11 +125,11 @@ const fm = parseFrontmatter(SAMPLE_REQ);
 eq(fm["重点项目"], true, "boolean true");
 eq(fm["已批准"], false, "boolean false");
 eq(typeof fm["预估工作量"], "string", "工作量保持字符串");
-eq(fm["功能点"], ["分页导出", "异步任务通知"], "列表解析");
+eq(fm["功能点"], ["功能点一", "功能点二"], "列表解析");
 
 console.log("5. 列表风格布尔/数字（updateFrontmatter 写入后的回读，§4.6 邮件标志）");
 const fmList = parseFrontmatter(`---
-上线审核邮件:
+环节一邮件:
   - true
 预估工作量:
   - 43
@@ -144,23 +139,23 @@ const fmList = parseFrontmatter(`---
 
 # 测试
 `);
-eq(fmList["上线审核邮件"], [true], "列表项 true → boolean 数组");
+eq(fmList["环节一邮件"], [true], "列表项 true → boolean 数组");
 eq(fmList["预估工作量"], [43], "列表项 43 → number 数组");
 eq(fmList["项目状态"], ["进行中"], "列表项中文保持字符串");
 
 console.log("5b. 邮件标志回读（parseRequirementNote 视角，§4.6 关键路径）");
 const reqList = parseRequirementNote("产品需求/测试.md", `---
-上线审核邮件:
+环节五邮件:
   - true
 重点项目:
   - true
-报备客服邮件: false
+环节六邮件: false
 ---
 
 # 测试
-`);
-eq(reqList.mailFlags["上线审核邮件"], true, "列表风格 true → mailFlags true");
-eq(reqList.mailFlags["报备客服邮件"], false, "内联 false → mailFlags false");
+`, ["环节五邮件", "环节六邮件"]);
+eq(reqList.mailFlags["环节五邮件"], true, "列表风格 true → mailFlags true");
+eq(reqList.mailFlags["环节六邮件"], false, "内联 false → mailFlags false");
 eq(reqList.keyProject, true, "列表风格重点项目 → true");
 
 console.log("6. 内联列表类型转换");

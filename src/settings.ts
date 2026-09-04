@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting, SettingPage, TextComponent } from "obsidian";
+import { App, Notice, PluginSettingTab, Setting, SettingPage, TextComponent } from "obsidian";
 import type { SettingDefinitionItem } from "obsidian";
 import type AIPMTool from "./main";
 import type { LLMProvider } from "./types";
@@ -6,6 +6,10 @@ import { setFileLogEnabled } from "./utils/logger";
 import { maskAccount } from "./utils/secure";
 import { FolderPickerModal } from "./view/FolderPickerModal";
 import { FilePickerModal } from "./view/FilePickerModal";
+
+// 模型「测试」结果（会话级）：providerId → 结果；仅存内存——Obsidian 重开/插件重载即重置（测试按钮旁不再常显旧结果）
+// ok = 通过；fail 附带原因文本（常驻行内展示于按钮左侧，不用 Notice）
+const llmTestResults = new Map<string, { ok: boolean; reason?: string }>();
 
 // =====================================================================
 // 共享：大模型 provider 管理渲染（ProviderSettingsPage 声明式页）
@@ -129,6 +133,39 @@ function renderProviders(plugin: AIPMTool, onRerender: () => void, providerList:
           b.setIcon(show ? "eye-off" : "eye");
         });
       });
+
+    // 测试行（无文案）：✓/✗ 会话级指示在按钮左侧、左对齐；失败原因常驻 ✗ 之后（不用 Notice）；上限值自动保存，不展示
+    const testRow = card.createDiv({ cls: "ai-pm-provider-test" });
+    const lastResult = llmTestResults.get(p.id);
+    if (lastResult) {
+      testRow.createSpan({
+        text: lastResult.ok ? "✓" : "✗",
+        cls: lastResult.ok ? "ai-pm-test-pass" : "ai-pm-test-fail",
+      });
+      if (!lastResult.ok && lastResult.reason) {
+        testRow.createSpan({ text: lastResult.reason, cls: "ai-pm-test-reason" });
+      }
+    }
+    const testBtn = testRow.createEl("button", { text: "测试", type: "button" });
+    testBtn.addEventListener("click", async () => {
+      const gw = plugin.gateway;
+      if (!gw) {
+        new Notice("模型网关未就绪，请稍后重试", 6000);
+        return;
+      }
+      testBtn.disabled = true;
+      testBtn.textContent = "测试中…";
+      try {
+        const r = await gw.probeOutputLimit(p);
+        p.maxOutputTokens = r.maxOutputTokens;
+        await plugin.saveSettings();
+        llmTestResults.set(p.id, { ok: true });
+      } catch (e) {
+        llmTestResults.set(p.id, { ok: false, reason: (e as Error).message });
+      } finally {
+        onRerender();
+      }
+    });
   });
 }
 
@@ -218,11 +255,31 @@ export class AIPMSettingTab extends PluginSettingTab {
       });
   }
 
+  /** 路径类设置行：信息（名称+长描述）与控件上下分排、输入框占满整行——路径长时可横向滚动查看完整值 */
+  private longPathRow(setting: Setting): void {
+    setting.settingEl.addClass("ai-pm-long-row");
+  }
+
+  /** 路径/长文本输入框：占满控件行宽；hover（title）显示完整当前值并随输入同步（过长时输入框内原生横向滚动） */
+  private longPathInput(t: TextComponent, placeholder: string): void {
+    const el = t.inputEl;
+    el.addClass("ai-pm-long-inp");
+    const syncTitle = (): void => {
+      el.title = el.value.trim() || placeholder;
+    };
+    // 调用点位于 addText 回调内、setValue 之前（此时 el.value 尚为空）：
+    // 初始 title 推迟到当前同步渲染结束后再同步一次，确保打开设置页时 hover 即显示完整当前值
+    syncTitle();
+    el.addEventListener("input", syncTitle);
+    setTimeout(syncTitle, 0);
+  }
+
   /**
    * 「需求笔记目录」设置行：输入框 + 「选择目录」按钮 + 空值错误提示（留空时总览为空）。
    * 供声明式 render 使用。
    */
   private renderRequirementDir(setting: Setting): void {
+    this.longPathRow(setting);
     const syncError = (): void => {
       if (this.plugin.settings.requirementDir.trim()) {
         setting.setErrorMessage(null);
@@ -235,6 +292,7 @@ export class AIPMSettingTab extends PluginSettingTab {
     setting
       .addText((t) => {
         input = t;
+        this.longPathInput(t, "如 产品需求");
         t.setPlaceholder("如 产品需求")
           .setValue(this.plugin.settings.requirementDir)
           .onChange(async (v) => {
@@ -260,10 +318,12 @@ export class AIPMSettingTab extends PluginSettingTab {
    * 供声明式 render 使用。
    */
   private renderTemplateDir(setting: Setting): void {
+    this.longPathRow(setting);
     let input: TextComponent | null = null;
     setting
       .addText((t) => {
         input = t;
+        this.longPathInput(t, "如 产品需求模板");
         t.setPlaceholder("如 产品需求模板")
           .setValue(this.plugin.settings.attachmentTemplateDir)
           .onChange(async (v) => {
@@ -287,10 +347,12 @@ export class AIPMSettingTab extends PluginSettingTab {
    * 供声明式 render 使用。
    */
   private renderContactBookPath(setting: Setting): void {
+    this.longPathRow(setting);
     let input: TextComponent | null = null;
     setting
       .addText((t) => {
         input = t;
+        this.longPathInput(t, "如 产品需求模板/通讯录名单.md");
         t.setPlaceholder("如 产品需求模板/通讯录名单.md")
           .setValue(this.plugin.settings.contactBookPath)
           .onChange(async (v) => {
@@ -322,6 +384,119 @@ export class AIPMSettingTab extends PluginSettingTab {
     if (cb) {
       const idx = cb.lastIndexOf("/");
       if (idx > 0) return cb.slice(0, idx);
+    }
+    return this.plugin.settings.attachmentTemplateDir.trim();
+  }
+
+  /**
+   * 「需求笔记模板路径」设置行：输入框 + 「选择文件」按钮（✨ 新增需求用 Templater 真实执行该模板生成骨架）。
+   * 供声明式 render 使用。
+   */
+  private renderRequirementTemplatePath(setting: Setting): void {
+    this.longPathRow(setting);
+    let input: TextComponent | null = null;
+    setting
+      .addText((t) => {
+        input = t;
+        this.longPathInput(t, "如 产品规范/产品需求模板.md");
+        t.setPlaceholder("如 产品规范/产品需求模板.md")
+          .setValue(this.plugin.settings.requirementTemplatePath)
+          .onChange(async (v) => {
+            this.plugin.settings.requirementTemplatePath = v.trim();
+            await this.plugin.saveSettings();
+          });
+      })
+      .addButton((b) =>
+        b.setButtonText("选择文件…").onClick(() => {
+          const baseDir = this.filePickerBaseDir(this.plugin.settings.requirementTemplatePath);
+          new FilePickerModal(
+            this.app,
+            (path) => {
+              this.plugin.settings.requirementTemplatePath = path;
+              input?.setValue(path);
+              void this.plugin.saveSettings();
+            },
+            baseDir
+          ).open();
+        })
+      );
+  }
+
+  /**
+   * 「需求审核 SKILL 路径」设置行：输入框 + 「选择文件」按钮（留空 = 不做内容审核）。
+   * 供声明式 render 使用。
+   */
+  private renderReviewSkillPath(setting: Setting): void {
+    this.longPathRow(setting);
+    let input: TextComponent | null = null;
+    setting
+      .addText((t) => {
+        input = t;
+        this.longPathInput(t, "如 产品规范/需求审核规则.md");
+        t.setPlaceholder("如 产品规范/需求审核规则.md")
+          .setValue(this.plugin.settings.reviewSkillPath)
+          .onChange(async (v) => {
+            this.plugin.settings.reviewSkillPath = v.trim();
+            await this.plugin.saveSettings();
+          });
+      })
+      .addButton((b) =>
+        b.setButtonText("选择文件…").onClick(() => {
+          const baseDir = this.filePickerBaseDir(this.plugin.settings.reviewSkillPath);
+          new FilePickerModal(
+            this.app,
+            (path) => {
+              this.plugin.settings.reviewSkillPath = path;
+              input?.setValue(path);
+              void this.plugin.saveSettings();
+            },
+            baseDir
+          ).open();
+        })
+      );
+  }
+
+  /**
+   * 「需求内容生成 SKILL 路径」设置行：输入框 + 「选择文件」按钮
+   * （「✨ 新增需求」LLM 生成文件名/字段的公司口径规则源；留空 = 无公司口径，命名用通用三段式，不回退审核 SKILL）。
+   * 供声明式 render 使用。
+   */
+  private renderContentSkillPath(setting: Setting): void {
+    this.longPathRow(setting);
+    let input: TextComponent | null = null;
+    setting
+      .addText((t) => {
+        input = t;
+        this.longPathInput(t, "如 产品规范/需求内容生成规则.md");
+        t.setPlaceholder("如 产品规范/需求内容生成规则.md")
+          .setValue(this.plugin.settings.contentSkillPath)
+          .onChange(async (v) => {
+            this.plugin.settings.contentSkillPath = v.trim();
+            await this.plugin.saveSettings();
+          });
+      })
+      .addButton((b) =>
+        b.setButtonText("选择文件…").onClick(() => {
+          const baseDir = this.filePickerBaseDir(this.plugin.settings.contentSkillPath);
+          new FilePickerModal(
+            this.app,
+            (path) => {
+              this.plugin.settings.contentSkillPath = path;
+              input?.setValue(path);
+              void this.plugin.saveSettings();
+            },
+            baseDir
+          ).open();
+        })
+      );
+  }
+
+  /** 文件选择器枚举范围：优先「文件当前所在目录」，其次「模板目录」；都没有 → 空串（仅提示手动输入） */
+  private filePickerBaseDir(path: string): string {
+    const p = path.trim();
+    if (p) {
+      const idx = p.lastIndexOf("/");
+      if (idx > 0) return p.slice(0, idx);
     }
     return this.plugin.settings.attachmentTemplateDir.trim();
   }
@@ -436,6 +611,25 @@ export class AIPMSettingTab extends PluginSettingTab {
         aliases: ["TLS", "证书", "自签名", "内网"],
         control: { type: "toggle", key: "smtpSkipTlsVerify" },
       },
+      // ✨ 新增需求（P1 · 0.1.0）
+      {
+        name: "需求笔记模板路径",
+        desc: "✨ 新增需求 使用的需求笔记模板（vault 相对路径，如 产品规范/产品需求模板.md）。新增时用 Templater 真实执行该模板：frontmatter 全字段/默认值/日期计算/正文邮件小节全部按模板落地，模板更新后自动跟随",
+        aliases: ["需求模板", "模板路径", "新增需求", "生成需求", "requirement-template", "Templater"],
+        render: (setting) => this.renderRequirementTemplatePath(setting),
+      },
+      {
+        name: "需求审核 SKILL 路径",
+        desc: "需求内容审核规则源（vault 文件，如 产品规范/需求审核规则.md；内容按公司审核工作流提取，规则宽松、不要收紧）。新增需求时仅提取审核章节（预期价值/需求名称/业务分类校验）做审核，结果仅弹窗提示不落盘。留空或文件不可用 = 跳过内容审核（不阻塞创建）",
+        aliases: ["SKILL", "审核", "review", "内容审核"],
+        render: (setting) => this.renderReviewSkillPath(setting),
+      },
+      {
+        name: "需求内容生成 SKILL 路径",
+        desc: "「✨ 新增需求」LLM 生成（建议文件名=需求名称 + frontmatter 字段）的规则源，按贵司需求提报规范编写（如 产品规范/需求内容生成规则.md）：财务编码（如境内/跨境两档）、公司业务部门→产品线映射、重点项目清单、价值分类与达成周期。留空 = 无公司口径：命名用通用三段式说明、名称/列表 R 校验跳过（不回退「需求审核 SKILL」数据，不阻塞创建）。审核仍由「需求审核 SKILL 路径」负责，两文件互不覆盖",
+        aliases: ["SKILL", "内容生成", "生成", "命名", "content"],
+        render: (setting) => this.renderContentSkillPath(setting),
+      },
       // 📝 正文模板（§6）
       {
         name: "需求笔记目录",
@@ -469,7 +663,7 @@ export class AIPMSettingTab extends PluginSettingTab {
       // 🔒 安全（§5）
       {
         name: "模型调用脱敏",
-        desc: "调用模型时对商户/客户等敏感信息字段做脱敏处理",
+        desc: "调用模型时对手机号/邮箱/金额等敏感字段做脱敏处理（替换为占位符，不外泄）",
         aliases: ["脱敏", "安全"],
         control: { type: "toggle", key: "maskSensitive" },
       },
