@@ -364,30 +364,14 @@ export class AIPMSettingTab extends PluginSettingTab {
       })
       .addButton((b) =>
         b.setButtonText("选择文件…").onClick(() => {
-          // 目录上下文（Obsidian 审核合规：选择器仅枚举该目录，不走 vault.getFiles() 全库枚举）：
-          // 优先「通讯录当前所在目录」，其次「邮件模板目录」；都没有 → 空列表（提示直接输入路径）
-          const baseDir = this.contactBookPickerBaseDir();
-          new FilePickerModal(
-            this.app,
-            (path) => {
-              this.plugin.settings.contactBookPath = path;
-              input?.setValue(path);
-              void this.plugin.saveSettings();
-            },
-            baseDir
-          ).open();
+          // 不限目录：候选 = 整个仓库的 Markdown（通讯录可能放在任意目录）
+          new FilePickerModal(this.app, (path) => {
+            this.plugin.settings.contactBookPath = path;
+            input?.setValue(path);
+            void this.plugin.saveSettings();
+          }).open();
         })
       );
-  }
-
-  /** 通讯录文件选择器的枚举范围：优先「通讯录当前所在目录」，其次「邮件模板目录」；都没有 → 空串（仅提示手动输入） */
-  private contactBookPickerBaseDir(): string {
-    const cb = this.plugin.settings.contactBookPath.trim();
-    if (cb) {
-      const idx = cb.lastIndexOf("/");
-      if (idx > 0) return cb.slice(0, idx);
-    }
-    return this.plugin.settings.attachmentTemplateDir.trim();
   }
 
   /**
@@ -410,16 +394,12 @@ export class AIPMSettingTab extends PluginSettingTab {
       })
       .addButton((b) =>
         b.setButtonText("选择文件…").onClick(() => {
-          const baseDir = this.filePickerBaseDir(this.plugin.settings.requirementTemplatePath);
-          new FilePickerModal(
-            this.app,
-            (path) => {
-              this.plugin.settings.requirementTemplatePath = path;
-              input?.setValue(path);
-              void this.plugin.saveSettings();
-            },
-            baseDir
-          ).open();
+          // 不限目录：候选 = 整个仓库的 Markdown
+          new FilePickerModal(this.app, (path) => {
+            this.plugin.settings.requirementTemplatePath = path;
+            input?.setValue(path);
+            void this.plugin.saveSettings();
+          }).open();
         })
       );
   }
@@ -444,16 +424,12 @@ export class AIPMSettingTab extends PluginSettingTab {
       })
       .addButton((b) =>
         b.setButtonText("选择文件…").onClick(() => {
-          const baseDir = this.filePickerBaseDir(this.plugin.settings.reviewSkillPath);
-          new FilePickerModal(
-            this.app,
-            (path) => {
-              this.plugin.settings.reviewSkillPath = path;
-              input?.setValue(path);
-              void this.plugin.saveSettings();
-            },
-            baseDir
-          ).open();
+          // 不限目录：候选 = 整个仓库的 Markdown
+          new FilePickerModal(this.app, (path) => {
+            this.plugin.settings.reviewSkillPath = path;
+            input?.setValue(path);
+            void this.plugin.saveSettings();
+          }).open();
         })
       );
   }
@@ -479,28 +455,14 @@ export class AIPMSettingTab extends PluginSettingTab {
       })
       .addButton((b) =>
         b.setButtonText("选择文件…").onClick(() => {
-          const baseDir = this.filePickerBaseDir(this.plugin.settings.contentSkillPath);
-          new FilePickerModal(
-            this.app,
-            (path) => {
-              this.plugin.settings.contentSkillPath = path;
-              input?.setValue(path);
-              void this.plugin.saveSettings();
-            },
-            baseDir
-          ).open();
+          // 不限目录：候选 = 整个仓库的 Markdown
+          new FilePickerModal(this.app, (path) => {
+            this.plugin.settings.contentSkillPath = path;
+            input?.setValue(path);
+            void this.plugin.saveSettings();
+          }).open();
         })
       );
-  }
-
-  /** 文件选择器枚举范围：优先「文件当前所在目录」，其次「模板目录」；都没有 → 空串（仅提示手动输入） */
-  private filePickerBaseDir(path: string): string {
-    const p = path.trim();
-    if (p) {
-      const idx = p.lastIndexOf("/");
-      if (idx > 0) return p.slice(0, idx);
-    }
-    return this.plugin.settings.attachmentTemplateDir.trim();
   }
 
   /**
