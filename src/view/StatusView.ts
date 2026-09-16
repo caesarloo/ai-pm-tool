@@ -1,7 +1,7 @@
 /**
  * 状态总览（§4.3 侧边栏视图 / §4.4 变更展示）
  * - 动态统计：项目状态 / 需求状态 / 审批（已批准·已驳回）三维度切换，按实际数据聚合（§4.3 动态原则）
- * - 动态筛选 Tab（含计数）、搜索、我的任务、「我」徽标、快照信息
+ * - 动态筛选 Tab（含计数）、搜索、我的任务（独立开关）、「我」徽标、快照信息
  * - 自动刷新：监听 vault 文件变化（md 被修改/新增/删除）自动重扫列表，不触发 svn
  * - 手动同步：svn update → log/diff 变更记录（默认展开）+ ✕ 关闭
  */
@@ -9,7 +9,7 @@ import { ItemView, Notice, TAbstractFile, TFile, WorkspaceLeaf } from "obsidian"
 import type AIPMTool from "../main";
 import { type ChangeItem, type RequirementNote, type SnapshotInfo } from "../types";
 import { runSync, SvnClient, isSvnWorkingCopy } from "@caesarloo/simple-svn-client";
-import { aggregateStatus, filterByStatus, isApproved, isRejected, ownedByMe, scanRequirementNotes, searchNotes } from "../store/repo";
+import { aggregateStatus, applyNoteFilters, isApproved, isRejected, ownedByMe, scanRequirementNotes } from "../store/repo";
 import { vaultBasePath } from "../utils/path";
 import { log } from "../utils/logger";
 import { RequirementCreateModal } from "./RequirementCreateModal";
@@ -35,7 +35,9 @@ const STATUS_COLOR: Record<string, string> = {
 export class StatusView extends ItemView {
   plugin: AIPMTool;
   private notes: RequirementNote[] = [];
-  private projectTab: string | null = null; // 项目状态筛选（含「我的任务」）；null=未初始化，""=用户取消(不过滤)
+  private mineOnly = false; // 「我的任务」独立开关；与项目状态等维度 AND 组合（可同时选「我的任务 + 进行中」）
+  private filtersInit = false; // 默认筛选是否已初始化（仅首次渲染取默认值）
+  private projectTab = ""; // 项目状态筛选；空 = 该维度不过滤
   private requestTab: string = ""; // 需求状态筛选；空 = 该维度不过滤
   private approvalTab: string = ""; // 审批筛选（已批准 / 已驳回）；空 = 该维度不过滤
   private keyword = "";
@@ -255,16 +257,18 @@ export class StatusView extends ItemView {
       this.renderList();
     });
 
-    // ===== 组合筛选（§4.3：项目状态 + 需求状态 + 审批 三行固定，同时生效 AND 组合；不受规则文件影响） =====
+    // ===== 组合筛选（§4.3：「我的」+ 项目状态 + 需求状态 + 审批 四维度固定，同时生效 AND 组合；不受规则文件影响） =====
     const projectStats = aggregateStatus(this.notes, "项目状态");
     const requestStats = aggregateStatus(this.notes, "需求状态");
     const me = this.plugin.currentUser();
     const mineCount = this.notes.filter((n) => ownedByMe(n, me)).length;
-    // 默认项目状态筛选（仅首次 null 时）：我的任务 > 0 ? 我的任务 : 进行中（无进行中则回退第一个状态）
-    if (this.projectTab === null) {
-      if (mineCount > 0) this.projectTab = "我的任务";
-      else if (projectStats.some((s) => s.value === "进行中")) this.projectTab = "进行中";
-      else this.projectTab = projectStats[0]?.value ?? "我的任务";
+    // 默认筛选（仅首次渲染）：有「我的任务」→ 只看我的任务（项目状态不过滤）；否则项目状态默认「进行中」（无进行中则不过滤）
+    if (!this.filtersInit) {
+      this.filtersInit = true;
+      this.mineOnly = mineCount > 0;
+      if (!this.mineOnly) {
+        this.projectTab = projectStats.some((s) => s.value === "进行中") ? "进行中" : "";
+      }
     }
 
     const renderDimRow = (
@@ -288,20 +292,27 @@ export class StatusView extends ItemView {
       return row;
     };
 
-    // 行 1：项目状态（含「我的任务」）
+    // 行 1：「我的」——独立开关，与项目状态 AND 组合（可同时选「我的任务 + 进行中」）
+    renderDimRow(
+      "我的",
+      [{ value: "我的任务", count: mineCount, color: "blue" }],
+      this.mineOnly ? "我的任务" : "",
+      (v) => {
+        this.mineOnly = v === "我的任务";
+        this.render();
+      }
+    );
+    // 行 2：项目状态（与「我的」维度独立，可叠加）
     renderDimRow(
       "项目",
-      [
-        { value: "我的任务", count: mineCount, color: "blue" },
-        ...projectStats.map((s) => ({ value: s.value, count: s.count, color: STATUS_COLOR[s.value] ?? "gray" })),
-      ],
+      projectStats.map((s) => ({ value: s.value, count: s.count, color: STATUS_COLOR[s.value] ?? "gray" })),
       this.projectTab,
       (v) => {
         this.projectTab = v;
         this.render();
       }
     );
-    // 行 2：需求状态
+    // 行 3：需求状态
     renderDimRow(
       "需求",
       requestStats.map((s) => ({ value: s.value, count: s.count, color: STATUS_COLOR[s.value] ?? "gray" })),
@@ -311,7 +322,7 @@ export class StatusView extends ItemView {
         this.render();
       }
     );
-    // 行 3：审批（已批准 / 已驳回，frontmatter 布尔标志）
+    // 行 4：审批（已批准 / 已驳回，frontmatter 布尔标志）
     renderDimRow(
       "审批",
       [
@@ -356,23 +367,15 @@ export class StatusView extends ItemView {
   }
 
   private renderListInto(list: HTMLElement): void {
-    let items = this.notes;
-    // 组合筛选（AND）：项目状态 + 需求状态 同时生效
-    if (this.projectTab === "我的任务") {
-      const identity = this.plugin.currentUser();
-      items = items.filter((n) => ownedByMe(n, identity));
-    } else if (this.projectTab) {
-      items = filterByStatus(items, "项目状态", this.projectTab);
-    }
-    if (this.requestTab) {
-      items = filterByStatus(items, "需求状态", this.requestTab);
-    }
-    if (this.approvalTab === "已批准") {
-      items = items.filter((n) => isApproved(n));
-    } else if (this.approvalTab === "已驳回") {
-      items = items.filter((n) => isRejected(n));
-    }
-    items = searchNotes(items, this.keyword);
+    // 组合筛选（AND，各维度独立）：「我的任务」/ 项目状态 / 需求状态 / 审批 / 关键词可同时生效
+    let items = applyNoteFilters(this.notes, {
+      mineOnly: this.mineOnly,
+      me: this.plugin.currentUser(),
+      projectStatus: this.projectTab,
+      requestStatus: this.requestTab,
+      approval: this.approvalTab,
+      keyword: this.keyword,
+    });
 
     // 排序：进行中优先，其次未开始，按计划上线日期
     const priority: Record<string, number> = { 进行中: 0, 未开始: 1, 暂停: 2, 已上线: 3, 终止: 4, 忽略: 5 };

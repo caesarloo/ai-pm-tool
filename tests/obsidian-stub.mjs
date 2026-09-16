@@ -1,4 +1,4 @@
-// obsidian stub：仅用于 frontmatter 冒烟测试（ProgressModal 导入链需要）
+// obsidian stub：仅用于冒烟测试（ProgressModal 导入链需要）
 export class Modal {}
 export class Notice {}
 export class Component {
@@ -17,4 +17,5 @@ export class Setting {
   addExtraButton() { return this; }
 }
 export class TFile {}
+export class TFolder {}
 export class FileSystemAdapter {}

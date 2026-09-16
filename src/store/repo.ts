@@ -98,7 +98,7 @@ export function filterByStatus(notes: RequirementNote[], dim: "项目状态" | "
   });
 }
 
-/** 负责人是否含当前用户（「我的任务」Tab 与「我」徽标，§4.3） */
+/** 负责人是否含当前用户（「我的任务」筛选与「我」徽标，§4.3） */
 export function ownedByMe(note: RequirementNote, me: string): boolean {
   const all = Object.values(note.roles).flat();
   return all.includes(me);
@@ -130,4 +130,32 @@ export function searchNotes(notes: RequirementNote[], keyword: string): Requirem
         .flat()
         .some((p) => p.toLowerCase().includes(k))
   );
+}
+
+/** 组合筛选条件（§4.3）：各维度独立，互不排斥；未给出的维度不过滤 */
+export interface NoteFilters {
+  /** 仅我的任务（按当前用户姓名匹配负责人），与项目/需求/审批维度 AND 组合，可同时启用 */
+  mineOnly?: boolean;
+  me?: string;
+  projectStatus?: string;
+  requestStatus?: string;
+  approval?: string;
+  keyword?: string;
+}
+
+/**
+ * 组合筛选（§4.3）：我的任务 + 项目状态 + 需求状态 + 审批 + 关键词，各维度**同时生效（AND）**。
+ * 「我的任务」与「项目状态」是彼此独立的维度（可同时选「我的任务 + 进行中」），不互斥。
+ */
+export function applyNoteFilters(notes: RequirementNote[], f: NoteFilters = {}): RequirementNote[] {
+  let items = notes;
+  if (f.mineOnly) {
+    const me = f.me ?? "";
+    items = items.filter((n) => ownedByMe(n, me));
+  }
+  if (f.projectStatus) items = filterByStatus(items, "项目状态", f.projectStatus);
+  if (f.requestStatus) items = filterByStatus(items, "需求状态", f.requestStatus);
+  if (f.approval === "已批准") items = items.filter((n) => isApproved(n));
+  else if (f.approval === "已驳回") items = items.filter((n) => isRejected(n));
+  return searchNotes(items, f.keyword ?? "");
 }

@@ -537,7 +537,7 @@ export class AIPMSettingTab extends PluginSettingTab {
       // 👤 当前用户（§4.3）
       {
         name: "我的姓名",
-        desc: "用于「我的任务」Tab 与卡片「我」徽标（按负责人姓名匹配）。收件人邮箱与公共邮箱统一取自「通讯录名单路径」指定的通讯录；留空则不做邮箱匹配（收件人按姓名原样保留）。姓名存 Obsidian SecretStorage，设置页隐位展示",
+        desc: "用于「我的任务」筛选（独立开关，与项目状态/需求状态/审批同时生效）与卡片「我」徽标（按负责人姓名匹配）。收件人邮箱与公共邮箱统一取自「通讯录名单路径」指定的通讯录；留空则不做邮箱匹配（收件人按姓名原样保留）。姓名存 Obsidian SecretStorage，设置页隐位展示",
         aliases: ["姓名", "用户", "我的任务"],
         render: (setting) =>
           this.addAccountInput(setting, s.currentUser, (v) => {

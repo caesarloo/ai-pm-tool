@@ -1,10 +1,11 @@
 /**
- * 文件选择弹窗（FuzzySuggestModal）：仅枚举指定目录下的 Markdown 文件，供「通讯录名单路径」等设置项选择。
- * Obsidian 审核合规：不走 vault.getFiles() 全库枚举，只递归列出 baseDir（目录上下文）内的文件；
- * baseDir 为空（未配置任何目录上下文）时列表为空，提示用户直接在上方输入 vault 路径。
+ * 文件选择弹窗（FuzzySuggestModal）：枚举 Markdown 文件，供「通讯录名单路径」「需求笔记模板路径」等设置项选择。
+ * - 有目录上下文（baseDir 非空）：只递归列出该目录内的文件（Obsidian 审核合规：不走 vault.getFiles() 全库枚举）
+ * - 无目录上下文（baseDir 为空，如设置项尚未填写、模板目录也未配置）：回退整个仓库的 Markdown 文件，
+ *   保证文件路径留空时选择器仍能匹配到文件（此前返回空列表 → 无法选择任何文件）
  */
 import { App, FuzzySuggestModal, TFile } from "obsidian";
-import { listFilesRecursive } from "../utils/vaultFs";
+import { listMarkdownFiles } from "../utils/vaultFs";
 
 export class FilePickerModal extends FuzzySuggestModal<TFile> {
   private files: TFile[] = [];
@@ -15,7 +16,7 @@ export class FilePickerModal extends FuzzySuggestModal<TFile> {
     this.setPlaceholder(
       baseDir.trim()
         ? "输入关键词过滤，或浏览目录文件…"
-        : "未配置目录上下文：请直接在上方输入 vault 路径（如 产品需求模板/通讯录名单.md）"
+        : "输入关键词过滤，或浏览仓库全部 Markdown 文件…"
     );
     this.setInstructions([
       { command: "↑↓", purpose: "选择" },
@@ -25,14 +26,12 @@ export class FilePickerModal extends FuzzySuggestModal<TFile> {
     this.ready = this.loadFiles(baseDir);
   }
 
-  /** 仅枚举 baseDir 目录树下的 Markdown 文件；目录为空/不存在/不可读 → 空列表 */
+  /** baseDir 非空：枚举该目录树；为空：枚举整个仓库（见 listMarkdownFiles）；读取不到 → 空列表 */
   private async loadFiles(baseDir: string): Promise<TFile[]> {
-    const prefix = baseDir.trim().replace(/^\/+|\/+$/g, "");
-    if (!prefix) return [];
-    const paths = await listFilesRecursive(this.app, prefix);
+    const paths = await listMarkdownFiles(this.app, baseDir);
     return paths
       .map((p) => this.app.vault.getAbstractFileByPath(p))
-      .filter((f): f is TFile => f instanceof TFile && f.extension === "md")
+      .filter((f): f is TFile => f instanceof TFile)
       .sort((a, b) => a.path.localeCompare(b.path));
   }
 
