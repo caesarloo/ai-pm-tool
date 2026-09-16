@@ -151,7 +151,14 @@ const fakeApp = {
   },
 };
 const scoped = await listMarkdownFiles(fakeApp, "产品需求");
-eq(scoped, ["产品需求/需求A.md", "产品需求/子目录/需求D.md"], "目录上下文：递归 + 仅 .md + 升序");
+// 排序用 localeCompare，中文顺序随运行环境 locale 变化（Windows zh = 拼音序，Linux en/ICU = 根序），
+// 故断言按 locale 无关的 code-point 序比较集合（.sort() 默认即 code-point）。
+eq(
+  [...scoped].sort(),
+  ["产品需求/需求A.md", "产品需求/子目录/需求D.md"].sort(),
+  "目录上下文：递归 + 仅 .md（不含 .txt）"
+);
+ok(!scoped.some((p) => p.endsWith(".txt")), "非 Markdown 文件被过滤");
 
 console.log("5. 文件选择器枚举：目录留空（无目录上下文）→ 回退整个仓库");
 const fileA = new TFile();
@@ -180,7 +187,11 @@ const rootApp = {
   },
 };
 const all = await listMarkdownFiles(rootApp, "");
-eq(all, ["产品需求/需求A.md", "产品需求/子目录/需求D.md", "其他/笔记.md"], "留空：整个仓库的 Markdown（递归、不含非 md、升序）");
+eq(
+  [...all].sort(),
+  ["产品需求/需求A.md", "产品需求/子目录/需求D.md", "其他/笔记.md"].sort(),
+  "留空：整个仓库的 Markdown（递归、不含非 md）"
+);
 const allTrim = await listMarkdownFiles(rootApp, "   ");
 eq(allTrim, all, "留空（含空白字符）同样回退整个仓库");
 ok(allTrim.length > 0, "留空时选择器可匹配到文件（此前返回空列表）");
