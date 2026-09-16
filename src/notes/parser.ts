@@ -225,8 +225,9 @@ export function serializeFrontmatter(
       for (const it of items) rows.push(`  - ${singleLine(it)}`);
     } else if (Array.isArray(raw)) {
       // 内联键但值为列表（模板/人工改写过）：按列表块写出，YAML 语义一致
+      // raw 为 unknown 经 Array.isArray 收窄为 any[]——显式转 unknown[] 再 String()，避免 any 流入 string 参数
       rows.push(`${key}:`);
-      for (const it of raw) rows.push(`  - ${singleLine(it)}`);
+      for (const it of raw as unknown[]) rows.push(`  - ${singleLine(String(it))}`);
     } else if (raw === null || raw === undefined || raw === "") {
       rows.push(`${key}:`);
     } else {

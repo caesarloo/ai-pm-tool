@@ -147,7 +147,8 @@ function renderProviders(plugin: AIPMTool, onRerender: () => void, providerList:
       }
     }
     const testBtn = testRow.createEl("button", { text: "测试", type: "button" });
-    testBtn.addEventListener("click", async () => {
+    // async 函数不能直接作为 void 回调传入 addEventListener（no-misused-promises）：命名函数 + 同步包装
+    const runProbe = async (): Promise<void> => {
       const gw = plugin.gateway;
       if (!gw) {
         new Notice("模型网关未就绪，请稍后重试", 6000);
@@ -165,7 +166,8 @@ function renderProviders(plugin: AIPMTool, onRerender: () => void, providerList:
       } finally {
         onRerender();
       }
-    });
+    };
+    testBtn.addEventListener("click", () => void runProbe());
   });
 }
 
@@ -271,7 +273,7 @@ export class AIPMSettingTab extends PluginSettingTab {
     // 初始 title 推迟到当前同步渲染结束后再同步一次，确保打开设置页时 hover 即显示完整当前值
     syncTitle();
     el.addEventListener("input", syncTitle);
-    setTimeout(syncTitle, 0);
+    window.setTimeout(syncTitle, 0);
   }
 
   /**

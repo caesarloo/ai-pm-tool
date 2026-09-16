@@ -1436,7 +1436,7 @@ textarea.ai-pm-req-ctl { height: auto; min-height: 26px; padding: 4px 8px; line-
   border: 1px solid var(--background-modifier-border, #e4e4e4);
   border-radius: 6px;
   padding: 8px 10px;
-  font-family: var(--font-monospace, ui-monospace, Consolas, monospace);
+  font-family: var(--font-monospace, Consolas, monospace);
   font-size: 11px; line-height: 1.75;
   color: var(--text-normal, #555);
   background: var(--background-primary, #fff);

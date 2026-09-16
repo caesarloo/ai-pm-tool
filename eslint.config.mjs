@@ -47,6 +47,7 @@ export default tseslint.config(
       "obsidianmd/object-assign": "error",
       "obsidianmd/platform": "error",
       "obsidianmd/prefer-abstract-input-suggest": "error",
+      "obsidianmd/prefer-window-timers": "error",
       "obsidianmd/regex-lookbehind": "error",
       "obsidianmd/sample-names": "error",
       "obsidianmd/validate-manifest": "error",
@@ -74,6 +75,9 @@ export default tseslint.config(
       "obsidianmd/no-unsupported-api": "error",
       "obsidianmd/prefer-file-manager-trash-file": "warn",
       "obsidianmd/prefer-instanceof": "error",
+      // 审核 bot 反馈的同类问题本地前移（v0.1.2）：any 流入类型化参数 / async 传入 void 回调
+      "@typescript-eslint/no-unsafe-argument": "error",
+      "@typescript-eslint/no-misused-promises": "error",
     },
   },
 
