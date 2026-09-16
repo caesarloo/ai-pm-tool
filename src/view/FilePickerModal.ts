@@ -13,8 +13,8 @@ export class FilePickerModal extends FuzzySuggestModal<TFile> {
 
   constructor(app: App, private onPick: (path: string) => void) {
     super(app);
-    // eslint-disable-next-line obsidianmd/ui/sentence-case -- "Markdown" 是专有名词，保留首字母大写
-    this.setPlaceholder("输入关键词过滤，或浏览仓库全部 Markdown 文件…");
+    // 文案避开英文专有名词：sentence-case 规则不允许禁用，故用中文「笔记文件」表述候选范围
+    this.setPlaceholder("输入关键词过滤，或浏览整个仓库的笔记文件…");
     this.setInstructions([
       { command: "↑↓", purpose: "选择" },
       { command: "↵", purpose: "确认" },
