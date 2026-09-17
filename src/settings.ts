@@ -484,7 +484,7 @@ export class AIPMSettingTab extends PluginSettingTab {
       // 🌐 网络方式（LLM 请求）
       {
         name: "请求方式",
-        desc: "跟随系统代理：用操作系统代理设置（内网代理场景常用）；直连：不走任何代理；自定义代理：指定代理地址（如 http://127.0.0.1:7897）",
+        desc: "跟随系统代理：用操作系统代理设置（内网代理场景常用）；直连：不走任何代理；自定义代理：指定代理地址（如 http://127.0.0.1:8080）",
         aliases: ["代理", "proxy", "网络"],
         control: {
           type: "dropdown",

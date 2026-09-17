@@ -106,7 +106,7 @@ export interface AIPMSettings {
   maskSensitive: boolean; // 默认 true
   // 网络方式（§5 LLM 请求）：跟随系统代理 / 直连无代理 / 自定义代理
   llmProxyMode: "system" | "direct" | "custom"; // 默认 system
-  llmProxyUrl: string; // 自定义代理地址，如 http://127.0.0.1:7897
+  llmProxyUrl: string; // 自定义代理地址，如 http://127.0.0.1:8080
   // 当前用户（「我的任务」Tab 与「我」徽标，§4.3；存 Obsidian SecretStorage，设置页隐位展示）
   currentUser: string;
   // SMTP 邮件发送（§4.6）：未配置时点击发送仅回写留痕

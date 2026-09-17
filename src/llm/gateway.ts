@@ -5,7 +5,7 @@
  * - 网络方式（设置 → 网络方式，§5）：
  *   跟随系统代理（Electron/Chromium fetch，默认，继承操作系统代理设置）
  *   直连无代理（Node https，绕过系统代理直接连接）
- *   自定义代理（Node https + CONNECT 隧道，如 http://127.0.0.1:7897）
+ *   自定义代理（Node https + CONNECT 隧道，如 http://127.0.0.1:8080）
  * - 敏感信息脱敏（§5 / §7）；所有请求均输出详细日志（模式/地址/耗时/错误码），便于排查网络问题
  */
 import { requestUrl } from "obsidian";
@@ -192,7 +192,7 @@ export class LLMGateway {
     const mode: "system" | "direct" | "custom" = this.settings.llmProxyMode ?? "system";
     const proxy = mode === "custom" ? parseProxyUrl(this.settings.llmProxyUrl) : null;
     if (mode === "custom" && !proxy) {
-      throw new LlmError("自定义代理地址无效：请填写形如 http://127.0.0.1:7897 的代理地址");
+      throw new LlmError("自定义代理地址无效：请填写形如 http://127.0.0.1:8080 的代理地址");
     }
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -305,7 +305,7 @@ export class LLMGateway {
     const mode: "system" | "direct" | "custom" = this.settings.llmProxyMode ?? "system";
     const proxy = mode === "custom" ? parseProxyUrl(this.settings.llmProxyUrl) : null;
     if (mode === "custom" && !proxy) {
-      throw new LlmError("自定义代理地址无效：请填写形如 http://127.0.0.1:7897 的代理地址");
+      throw new LlmError("自定义代理地址无效：请填写形如 http://127.0.0.1:8080 的代理地址");
     }
 
     const headers: Record<string, string> = { "Content-Type": "application/json" };
