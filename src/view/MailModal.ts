@@ -4,6 +4,8 @@
  * - 三步流程：① LLM 自动生成草稿 → ② 预览确认（可编辑/重新生成） → ③ 发送回写
  * - 重新生成：文本框填写调整要求 + 右下角紫色圆形「↑」按钮
  * - 发送回写：frontmatter 邮件标志 true + 正文发送记录写入/替换对应节点小节（## <环节>邮件，无则新增）；
+ *   小节标题与记录正文之间、记录正文内表格之前一律留空行（Markdown 表格前置空行，否则 Obsidian 不渲染表格）；
+ *   回写算法在 notes/mailRecord（纯字符串逻辑，可单测）
  *   结果页 = ① 邮件发送（顶部区域，含发送时间）+ ② 需求笔记变更预览（旧→新）；SVN 提交走右下角按钮手动触发（无结果区域），
  *   提交成功后自动关闭邮件窗口返回项目进展（进展弹窗同步刷新未提交变更）；环节推进静默（不显示区域）
  * - 附件：无固定附件模板，每次由用户单独添加/移除；只记录本地文件路径（不缓存内容进内存），
@@ -19,6 +21,7 @@ import type AIPMTool from "../main";
 import type { RequirementNote } from "../types";
 import type { RuleStage } from "../rules";
 import { loadContactBook, formatRecipient, appendContactToBook, type ContactBook } from "../notes/contacts";
+import { upsertMailRecord } from "../notes/mailRecord";
 import { updateFrontmatter } from "./ProgressModal";
 import { SvnClient } from "@caesarloo/simple-svn-client";
 import { sendMail, isValidEmailAddr, type MailAttachment } from "../mail/smtp";
@@ -70,48 +73,6 @@ export function parseMailTemplate(text: string): MailTemplate {
     return parts.join("\n").trim();
   };
   return { subject: section("主题"), body: section("正文") };
-}
-
-/**
- * 将邮件发送记录写入需求笔记正文（替换或新增）：
- * - 已存在对应小节（## <label>邮件 / ## <label>（邮件发送记录），label 尾部「（…）」忽略）→ 替换该小节内容（标题行保留）
- * - 无对应小节 → 文末新增「## <label>邮件」小节
- * @returns replaced=true 表示替换了原有小节（用于变更预览「已有发送记录」）
- */
-function upsertMailRecord(content: string, nodeLabel: string, body: string): { content: string; replaced: boolean } {
-  const lines = content.split(/\r?\n/);
-  const baseLabel = nodeLabel.replace(/（[^）]*）$/, ""); // 项目准入（开发准入）→ 项目准入
-  const titleVariants = [
-    `## ${nodeLabel}邮件`,
-    `## ${nodeLabel}（邮件发送记录）`,
-    `## ${baseLabel}邮件`,
-    `## ${baseLabel}（邮件发送记录）`,
-  ];
-  let start = -1;
-  for (let i = 0; i < lines.length; i++) {
-    const t = lines[i].trim();
-    if (titleVariants.includes(t)) {
-      start = i;
-      break;
-    }
-  }
-  if (start < 0) {
-    // 无对应小节 → 文末新增（标题用 <label>邮件，与模板小节命名一致）
-    const block = `\n## ${baseLabel}邮件\n${body.trimEnd()}\n`;
-    return { content: content.trimEnd() + block, replaced: false };
-  }
-  // 替换小节内容：保留标题行，范围到下一个「邮件记录小节标题」（## <label>邮件 类，避免被记录正文内的 ## 正文标题截断，发布审核 P1-5）或文末
-  let end = lines.length;
-  for (let i = start + 1; i < lines.length; i++) {
-    const t = lines[i].trim();
-    if (/^##\s+.+邮件/.test(t) && (i === start + 1 || lines[i - 1].trim() === "")) {
-      end = i;
-      break;
-    }
-  }
-  const replaced: string[] = [lines[start].trimEnd(), body.trimEnd()];
-  lines.splice(start, end - start, ...replaced);
-  return { content: lines.join("\n"), replaced: true };
 }
 
 /** 占位符自动填充（尽力而为：需求信息能确定的直接替换；其余保留供人工/LLM 填写） */
