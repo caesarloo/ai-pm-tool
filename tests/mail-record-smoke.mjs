@@ -44,7 +44,7 @@ await build({
   logLevel: "silent",
 });
 const mod = await import(pathToFileURL(outFile).href);
-const { upsertMailRecord, ensureBlankLineBeforeTables } = mod;
+const { upsertMailRecord, ensureBlankLineBeforeTables, toObsidianQuote } = mod;
 
 // ===== 用例 =====
 console.log("1. ensureBlankLineBeforeTables 基本行为");
@@ -153,6 +153,46 @@ ok(round2.content.includes("\n\n## 开发评审邮件"), "替换后小节之间�
 ok(round2.content.includes("## 开发评审邮件\n\n邮件发送时间：2026-01-02 09:00"), "第二轮替换保留后续环节小节");
 ok(round2.content.includes("## 结尾说明\n\n别丢了我"), "第二轮替换保留后续非邮件小节");
 eq(round2.content.split("## 上线审核邮件").length - 1, 1, "第二轮替换不产生重复标题");
+
+console.log("8. 邮件正文 → Obsidian 引用块（toObsidianQuote）");
+eq(toObsidianQuote("各位好：\n请知悉。"), "\n> 各位好：\n> 请知悉。\n", "多行正文 → 每行加 `> ` 前缀（首尾各留空行）");
+eq(toObsidianQuote("各位好：\n\n请知悉。"), "\n> 各位好：\n>\n> 请知悉。\n", "空行写成 `>`（引用块连续，不被空行截断）");
+eq(toObsidianQuote(""), "", "空正文 → 空字符串（不产出空引用条）");
+eq(toObsidianQuote("  \n\n"), "", "全空白正文 → 空字符串");
+eq(
+  toObsidianQuote(`说明文字\n${TABLE}`),
+  "\n> 说明文字\n>\n> | 项目 | 结论 |\n> | --- | --- |\n> | 上线审核 | 通过 |\n",
+  "表格前补 `>` 空行（引用块内表格渲染前提）",
+);
+eq(
+  toObsidianQuote(TABLE),
+  "\n>\n> | 项目 | 结论 |\n> | --- | --- |\n> | 上线审核 | 通过 |\n",
+  "正文首行即表格 → 块首补 `>` 空行",
+);
+eq(toObsidianQuote("第一行\r\n第二行"), "\n> 第一行\n> 第二行\n", "CRLF 归一为 LF（不把 \\r 带进引用行）");
+eq(toObsidianQuote("第一行\r第二行"), "\n> 第一行\n> 第二行\n", "裸 CR 同样归一（不产生孤立引用行）");
+
+console.log("9. 完整回写形态：元信息与附件在引用块外，仅邮件正文进引用");
+const BODY_MD = ["各位好：", "", "现将审核结论同步如下：", TABLE, "请知悉。"].join("\n");
+const RECORD_WITH_QUOTE = [
+  "邮件发送时间：2026-09-18 10:00",
+  "收件人：张三（zhangsan@example.com）",
+  "主题：上线审核",
+  "正文（文本存档）：",
+  toObsidianQuote(BODY_MD),
+  "附件：结论.pdf",
+].join("\n");
+const full = upsertMailRecord("# 需求笔记\n\n## 背景\n\n正文段落。", "上线审核", RECORD_WITH_QUOTE);
+ok(full.content.includes("邮件发送时间：2026-09-18 10:00\n收件人：张三（zhangsan@example.com）"), "元信息保持普通行（不被引用）");
+ok(full.content.includes("主题：上线审核\n正文（文本存档）：\n\n> 各位好："), "引用块与标签行之间留空行");
+ok(full.content.includes("> 现将审核结论同步如下：\n>\n> | 项目 | 结论 |"), "引用块内表格前有 `>` 空行");
+ok(full.content.includes("> | 上线审核 | 通过 |\n> 请知悉。"), "表格块在引用块内未被拆散");
+ok(full.content.includes("> 请知悉。\n\n附件：结论.pdf"), "附件行在引用块外（留空行隔开）");
+eq(full.content.split("附件：结论.pdf").length - 1, 1, "附件行只出现一次");
+const noAttach = upsertMailRecord("# 需求笔记\n", "上线审核", ["邮件发送时间：2026-09-18 10:00", "正文（文本存档）：", toObsidianQuote("正文")].join("\n"));
+ok(noAttach.content.endsWith("> 正文\n"), "无附件时记录以引用块收尾（无多余空行）");
+const replacedQuote = upsertMailRecord(full.content, "上线审核", RECORD_WITH_QUOTE);
+ok(!replacedQuote.content.includes("\n\n\n"), "重复回写不累积空行（引用块替换幂等）");
 
 rmSync(outDir, { recursive: true, force: true });
 console.log(`\n结果：${passed} 通过，${failed} 失败`);

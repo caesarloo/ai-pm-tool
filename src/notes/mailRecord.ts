@@ -3,6 +3,8 @@
  * - 纯字符串逻辑（不依赖 obsidian），与 notes/parser.ts、notes/contacts.ts 同层，便于冒烟测试
  * - 回写内容里的表格必须能在 Obsidian 中正常渲染：Markdown 要求表格前留一个空行，
  *   否则整段会退化成普通文本行（邮件正文带表格时最常见，如审核结论表）
+ * - 邮件正文以 Obsidian 引用块（`> ` 前缀）存档：正文与元信息（时间/收件人/主题）在视觉上分层，
+ *   引用块内的表格同样要求前置空行，故先补空行再逐行加前缀（见 toObsidianQuote）
  */
 
 /** 表格行判定：形如 `| a | b |`（首尾竖线，至少两列；分隔行 `| --- | --- |` 同样命中） */
@@ -36,6 +38,24 @@ export function ensureBlankLineBeforeTables(text: string): string {
     out.push(line);
   }
   return out.join("\n");
+}
+
+/**
+ * 邮件正文 → Obsidian 引用块（`> ` 前缀），供回写留痕使用（§4.6）：
+ * - 空行写成 `>`（不带尾空格）：维持引用块连续，否则会被空行截断成多个引用块
+ * - 引用块内的表格同样要求前置空行（Obsidian 不渲染紧贴文字的表格），故**先补空行再逐行加前缀**；
+ *   补出的空行随即变成 `>`，即引用块内的前置空行；正文首行即表格时额外在块首补一个 `>` 空行
+ * - 返回带首尾空行的块：与元信息行（时间/收件人/主题）、附件行隔开，避免引用块边界产生解析歧义
+ * - 正文为空（或全空白）时返回空字符串：不产出空的引用条
+ */
+export function toObsidianQuote(text: string): string {
+  // 先归一换行（裸 \r 不被 ensureBlankLineBeforeTables 的 split 处理），再去掉尾部空行
+  const normalized = ensureBlankLineBeforeTables(text.replace(/\r\n?/g, "\n").trimEnd());
+  if (normalized.trim() === "") return "";
+  const lines = normalized.split("\n");
+  if (isTableRow(lines[0])) lines.unshift(""); // 引用块首行即表格 → 也要有前置空引用行
+  const quoted = lines.map((l) => (l.trim() === "" ? ">" : `> ${l}`)).join("\n");
+  return `\n${quoted}\n`;
 }
 
 /**

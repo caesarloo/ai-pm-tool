@@ -72,7 +72,7 @@ Fields are written back **key-by-key against the baseline at open time** — unt
 
 #### Milestone emails
 
-From a milestone node: ① **LLM draft** (falls back to a template when no model is configured) → ② **preview & edit** (recipients from your contact book + stakeholders, subject/body editable, attachments per-file) → ③ **send & record** (flags the milestone, archives the sent body into the note, then commit to SVN). Configure SMTP in Settings to actually send; without SMTP the flow only records the draft as sent-acknowledged.
+From a milestone node: ① **LLM draft** (falls back to a template when no model is configured) → ② **preview & edit** (recipients from your contact book + stakeholders, subject/body editable, attachments per-file) → ③ **send & record** (flags the milestone, archives the sent body into the note as an Obsidian quote block while metadata and attachment names stay outside the quote, then commit to SVN). Configure SMTP in Settings to actually send; without SMTP the flow only records the draft as sent-acknowledged.
 
 #### Add requirement (✨)
 
@@ -159,7 +159,7 @@ SVN 是独立版本控制系统，Obsidian 的 API 无法驱动它。同步 / �
 
 #### 节点邮件
 
-从进展页节点进入：① **LLM 生成草稿**（未配置模型时降级用模板草稿）→ ② **预览确认**（收件人来自通讯录+干系人，主题/正文可编辑、附件单独添加/移除）→ ③ **发送回写**（标记环节、正文发送记录存档、提交 SVN）。设置中配置 SMTP 后真实发信；未配置则仅回写留痕。
+从进展页节点进入：① **LLM 生成草稿**（未配置模型时降级用模板草稿）→ ② **预览确认**（收件人来自通讯录+干系人，主题/正文可编辑、附件单独添加/移除）→ ③ **发送回写**（标记环节、正文发送记录存档（邮件正文以 Obsidian 引用块 `> ` 存档，时间/收件人/主题等元信息与附件名留在引用块外）、提交 SVN）。设置中配置 SMTP 后真实发信；未配置则仅回写留痕。
 
 #### 新增需求（✨）
 

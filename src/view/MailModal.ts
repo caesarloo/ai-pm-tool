@@ -5,6 +5,7 @@
  * - 重新生成：文本框填写调整要求 + 右下角紫色圆形「↑」按钮
  * - 发送回写：frontmatter 邮件标志 true + 正文发送记录写入/替换对应节点小节（## <环节>邮件，无则新增）；
  *   小节标题与记录正文之间、记录正文内表格之前一律留空行（Markdown 表格前置空行，否则 Obsidian 不渲染表格）；
+ *   邮件正文以 Obsidian 引用块（`> `）存档，元信息（时间/收件人/主题）与附件行留在引用块外（见 notes/mailRecord 的 toObsidianQuote）；
  *   回写算法在 notes/mailRecord（纯字符串逻辑，可单测）
  *   结果页 = ① 邮件发送（顶部区域，含发送时间）+ ② 需求笔记变更预览（旧→新）；SVN 提交走右下角按钮手动触发（无结果区域），
  *   提交成功后自动关闭邮件窗口返回项目进展（进展弹窗同步刷新未提交变更）；环节推进静默（不显示区域）
@@ -21,7 +22,7 @@ import type AIPMTool from "../main";
 import type { RequirementNote } from "../types";
 import type { RuleStage } from "../rules";
 import { loadContactBook, formatRecipient, appendContactToBook, type ContactBook } from "../notes/contacts";
-import { upsertMailRecord } from "../notes/mailRecord";
+import { toObsidianQuote, upsertMailRecord } from "../notes/mailRecord";
 import { updateFrontmatter } from "./ProgressModal";
 import { SvnClient } from "@caesarloo/simple-svn-client";
 import { sendMail, isValidEmailAddr, type MailAttachment } from "../mail/smtp";
@@ -780,14 +781,14 @@ export class MailModal extends Modal {
         const file = this.app.vault.getAbstractFileByPath(this.note.path);
         if (!(file instanceof TFile)) throw new Error("找不到需求笔记文件");
         const oldContent = await this.app.vault.read(file);
-        // 正文发送记录（机器可读文本存档，替代截图）
+        // 正文发送记录（机器可读文本存档，替代截图）；邮件正文以 Obsidian 引用块（`> `）存档，与元信息分层
         const recordBody = [
           `邮件发送时间：${time}`,
           `收件人：${this.draft.recipients.map((r) => this.fmtRecipient(r)).join("；")}`,
           this.draft.cc.length > 0 ? `抄送：${this.draft.cc.map((c) => this.fmtRecipient(c)).join("；")}` : undefined,
           `主题：${this.draft.subject}`,
           `正文（文本存档）：`,
-          this.draft.body,
+          toObsidianQuote(this.draft.body),
           this.atts.length > 0 ? `附件：${this.atts.map((a) => a.name).join("；")}` : "",
         ]
           .filter((l) => l !== undefined)
