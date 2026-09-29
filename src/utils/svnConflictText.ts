@@ -12,8 +12,8 @@ export const CONFLICT_MARKER_RE = /^(?:<{7}|={7}|>{7})/m;
 /** 冲突条目（与 simple-svn-client 的 SvnConflict 同形，避免本模块依赖该包） */
 export interface ConflictLike {
   path: string;
-  /** 来源：status 状态位 / 树冲突 / 文件内容标记 */
-  source: "status" | "tree" | "marker" | string;
+  /** 来源：status 状态位 / 树冲突 / 文件内容标记（与 simple-svn-client `SvnConflict.source` 的封闭联合一致，不用 `| string` 兜底） */
+  source: "status" | "tree" | "marker";
   detail?: string;
 }
 
