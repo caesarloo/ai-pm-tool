@@ -194,6 +194,100 @@ ok(noAttach.content.endsWith("> 正文\n"), "无附件时记录以引用块收�
 const replacedQuote = upsertMailRecord(full.content, "上线审核", RECORD_WITH_QUOTE);
 ok(!replacedQuote.content.includes("\n\n\n"), "重复回写不累积空行（引用块替换幂等）");
 
+console.log("10. 小节边界判据修复（紧邻真标题 / 伪标题 / 白名单 / 冲突护栏）");
+const LABELS = ["需求评审", "工作量评估", "项目准入", "上线审核", "报备客服", "生产验证", "生产监控"];
+
+// 10.1 紧邻真标题（本次事故基线形态：图片行紧邻下一个标题，中间无空行）
+const ADJACENT = [
+  "## 工作量评估邮件",
+  "邮件发送时间：",
+  "邮件截图：",
+  "![img](x.png)",
+  "## 项目准入邮件",
+  "邮件发送时间：",
+  "邮件截图：",
+  "![img](y.png)",
+  "",
+  "## 上线审核邮件",
+  "邮件发送时间：",
+].join("\n");
+const adj = upsertMailRecord(ADJACENT, "工作量评估", RECORD_BODY, { knownLabels: LABELS });
+ok(adj.replaced && adj.blocked === undefined, "紧邻形态：正常替换（不再越界）");
+ok(adj.content.includes("## 项目准入邮件"), "紧邻形态：不吞掉「项目准入邮件」小节标题");
+ok(adj.content.includes("![img](y.png)"), "紧邻形态：相邻小节内容完整保留");
+ok(adj.content.includes("## 上线审核邮件"), "紧邻形态：后续小节保留");
+
+// 10.2 白名单漏配环节 → 护栏拒绝（宁可不动，也不吞段）
+const adjNoLabel = upsertMailRecord(ADJACENT, "工作量评估", RECORD_BODY, {
+  knownLabels: ["工作量评估", "上线审核"],
+});
+eq(adjNoLabel.content, ADJACENT, "白名单漏配「项目准入」：护栏拒绝回写，内容不变");
+eq(adjNoLabel.replaced, false, "拒绝时不标记 replaced");
+ok(
+  typeof adjNoLabel.blocked === "string" && adjNoLabel.blocked.includes("项目准入"),
+  "拒绝原因指出将被卷入的小节"
+);
+
+// 10.3 伪标题（正文里裸 ## 报表邮件）→ 护栏拒绝（既不静默吃掉，也不提前截断）
+const FAKE_HEAD = [
+  "## 工作量评估邮件",
+  "邮件发送时间：",
+  "",
+  "一些正文",
+  "",
+  "## 报表邮件",
+  "更多正文（属工作量评估小节正文）",
+  "",
+  "## 上线审核邮件",
+  "邮件发送时间：",
+].join("\n");
+const fake = upsertMailRecord(FAKE_HEAD, "工作量评估", RECORD_BODY, { knownLabels: LABELS });
+eq(fake.content, FAKE_HEAD, "伪标题形态：护栏拒绝回写（内容不变）");
+ok(fake.blocked.includes("报表邮件"), "拒绝原因指出伪标题");
+ok(fake.blocked.includes("引用块"), "拒绝原因给出处置建议（改写为引用块）");
+
+// 10.4 伪标题写成引用块（v0.1.7 存档形态）→ 正常替换
+const QUOTED_HEAD = [
+  "## 工作量评估邮件",
+  "邮件发送时间：",
+  "正文（文本存档）：",
+  "",
+  "> 各位好",
+  "> ## 上线审核邮件",
+  "> 引用中的标题",
+  "",
+  "## 上线审核邮件",
+  "邮件发送时间：",
+].join("\n");
+const qh = upsertMailRecord(QUOTED_HEAD, "工作量评估", RECORD_BODY, { knownLabels: LABELS });
+ok(qh.replaced && qh.blocked === undefined, "引用块内伪标题：正常替换（`> ` 前缀不算标题）");
+ok(qh.content.includes("## 上线审核邮件"), "引用块内伪标题：真小节保留");
+
+// 10.5 冲突块共存 → 护栏拒绝（不会半删标记）
+const WITH_CONFLICT = [
+  "## 工作量评估邮件",
+  "<<<<<<< .mine邮件发送时间：2026-09-28 17:00",
+  "收件人：张三",
+  "=======邮件发送时间：",
+  "邮件截图：",
+  ">>>>>>> .theirs",
+  "## 上线审核邮件",
+  "邮件发送时间：",
+].join("\n");
+const wc = upsertMailRecord(WITH_CONFLICT, "工作量评估", RECORD_BODY, { knownLabels: LABELS });
+eq(wc.content, WITH_CONFLICT, "含冲突标记：护栏拒绝回写（原文不变）");
+ok(wc.blocked.includes("冲突标记"), "拒绝原因指出冲突标记");
+
+// 10.6 文件末尾无空行
+const TAIL_NO_BLANK = ["# 笔记", "", "## 上线审核邮件", "邮件发送时间："].join("\n");
+const tnb = upsertMailRecord(TAIL_NO_BLANK, "上线审核", RECORD_BODY, { knownLabels: LABELS });
+ok(tnb.replaced && tnb.blocked === undefined, "文件末尾无空行：正常替换");
+ok(tnb.content.includes("2026-09-18 10:00"), "文件末尾无空行：记录已写入");
+
+// 10.7 不传 knownLabels（向后兼容）：独立行的真标题仍正确当边界
+const legacy = upsertMailRecord(ADJACENT, "工作量评估", RECORD_BODY);
+ok(legacy.replaced && legacy.content.includes("## 项目准入邮件"), "未传白名单：独立行的真标题仍正确当边界");
+
 rmSync(outDir, { recursive: true, force: true });
 console.log(`\n结果：${passed} 通过，${failed} 失败`);
 if (failed > 0) process.exit(1);

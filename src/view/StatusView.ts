@@ -8,10 +8,11 @@
 import { ItemView, Notice, TAbstractFile, TFile, WorkspaceLeaf } from "obsidian";
 import type AIPMTool from "../main";
 import { type ChangeItem, type RequirementNote, type SnapshotInfo } from "../types";
-import { runSync, SvnClient, isSvnWorkingCopy } from "@caesarloo/simple-svn-client";
+import { runSync, isSvnWorkingCopy } from "@caesarloo/simple-svn-client";
 import { aggregateStatus, applyNoteFilters, isApproved, isRejected, ownedByMe, scanRequirementNotes } from "../store/repo";
 import { vaultBasePath } from "../utils/path";
 import { log } from "../utils/logger";
+import { createSvnClient } from "../utils/svnGuard";
 import { RequirementCreateModal } from "./RequirementCreateModal";
 import { checkSeedMissing } from "../setup/seed";
 import { runSvnSerialized } from "../utils/svnQueue";
@@ -125,7 +126,7 @@ export class StatusView extends ItemView {
     // 快照信息：尽力读取 SVN 版本号（非同步目录则显示提示）
     if (!this.snapshot) {
       const base = vaultBasePath(this.app);
-      const client = new SvnClient(base || this.app.vault.getRoot().path);
+      const client = createSvnClient(this.app, base || this.app.vault.getRoot().path);
       if (base && (await isSvnWorkingCopy(base))) {
         const rev = await client.getRevision();
         log.debug(`SVN 工作副本 r${rev}`);
@@ -155,7 +156,17 @@ export class StatusView extends ItemView {
         `同步结果：ok=${result.ok} revOld=${result.revOld} revNew=${result.snapshot.revision} 变更文件=${result.snapshot.changedFiles} 变更条目=${result.changes.length} message=${result.message}`
       );
       if (!result.ok) {
-        new Notice(result.message, 8000);
+        // fail-closed（SVN 环节）：update 带出冲突时不按「一句提示」放过，而是明确阻断并列出冲突文件
+        const conflicts = result.conflicts ?? [];
+        if (conflicts.length > 0) {
+          const list = conflicts
+            .map((c) => `${c.path}（${c.kind === "tree" ? "树冲突" : c.kind === "property" ? "属性冲突" : "文本冲突"}）`)
+            .join("、");
+          log.error(`SVN 同步带出 ${conflicts.length} 处冲突：${list}`);
+          new Notice(`检测到 ${conflicts.length} 处 SVN 冲突，已停止后续处理；请先解决冲突（删除标记或 svn resolve）再提交：${list}`, 15000);
+        } else {
+          new Notice(result.message, 8000);
+        }
         this.changes = [];
         this.changelogVisible = false;
       } else {

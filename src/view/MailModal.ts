@@ -24,12 +24,11 @@ import type { RuleStage } from "../rules";
 import { loadContactBook, formatRecipient, appendContactToBook, type ContactBook } from "../notes/contacts";
 import { toObsidianQuote, upsertMailRecord } from "../notes/mailRecord";
 import { updateFrontmatter } from "./ProgressModal";
-import { SvnClient } from "@caesarloo/simple-svn-client";
 import { sendMail, isValidEmailAddr, type MailAttachment } from "../mail/smtp";
-import { vaultBasePath } from "../utils/path";
 import { log } from "../utils/logger";
+import { autoMergeIfSafe, commitGuarded, createSvnClient } from "../utils/svnGuard";
+import { isConflictBlocked } from "../utils/svnConflictText";
 import { loadSvnDiff, renderSvnDiffBox } from "./svnDiffPreview";
-import { runSvnSerialized } from "../utils/svnQueue";
 import { listFilesRecursive } from "../utils/vaultFs";
 
 /** 邮件三步流程步骤名（步骤条仅显示当前环节名，不展示 1-2-3 水平进度条） */
@@ -794,7 +793,14 @@ export class MailModal extends Modal {
           .filter((l) => l !== undefined)
           .join("\n");
         let content = oldContent;
-        const upsert = upsertMailRecord(content, this.node.label, recordBody);
+        const upsert = upsertMailRecord(content, this.node.label, recordBody, {
+          // 当前生效的环节标签集合：只把命中集合的小节标题当边界（防正文里的伪标题误判）
+          knownLabels: this.plugin.stages().map((s) => s.label),
+        });
+        if (upsert.blocked !== undefined) {
+          // 安全护栏：待替换区间含冲突标记或其它小节 → 拒绝回写（宁可不动，也不误删内容）
+          throw new Error(`邮件记录回写被安全护栏拒绝：${upsert.blocked}（请勿重复发送；可手工补记该环节）`);
+        }
         content = upsert.content;
         content = updateFrontmatter(content, this.node.key, "true", "inline");
         await this.app.vault.modify(file, content);
@@ -931,15 +937,14 @@ export class MailModal extends Modal {
       if (disabled) footerBtn.setAttr("disabled", "true");
       else footerBtn.removeAttribute("disabled");
     };
-    const cwd = vaultBasePath(this.app);
-    const client = new SvnClient(cwd);
+    const client = createSvnClient(this.app);
     if (!(await client.isAvailable())) {
       new Notice("本机未检测到 SVN 命令，未提交 SVN（需在装有 SVN 的主机运行）", 6000);
       markBtn("未检测到 SVN", true);
       return;
     }
     try {
-      await runSvnSerialized(() => client.commit([this.note.path], `节点邮件：${this.node.label}（${this.note.name}）`, { autoAdd: true }));
+      await commitGuarded(this.app, [this.note.path], `节点邮件：${this.node.label}（${this.note.name}）`);
       log.debug(`SVN 提交成功：${this.note.path}`);
       new Notice(`已提交 SVN：${this.note.path}`, 4000);
       markBtn("✓ 已提交", true);
@@ -947,6 +952,24 @@ export class MailModal extends Modal {
       this.onCommitted?.();
       this.close();
     } catch (e) {
+      if (isConflictBlocked(e)) {
+        // fail-closed + 安全自动合并：成功则写盘并清除冲突状态，请用户核对后再提交（不自动入库）
+        const outcome = await autoMergeIfSafe(this.app, this.note.path);
+        if (outcome.merged) {
+          log.info(`邮件提交：已自动合并冲突 ${this.note.path}（取舍 ${outcome.decisions.length} 项）`);
+          new Notice(
+            `已自动合并本地与仓库的改动（${outcome.decisions.length} 处取舍）。请核对后再次点击「提交到 SVN」。`,
+            12000
+          );
+          markBtn("↻ 已合并 · 请核对后重新提交", false);
+          return;
+        }
+        const detail = outcome.conflicts.length > 0 ? `；自动合并未执行：${outcome.conflicts.join("；")}` : "";
+        log.error(`SVN 提交被冲突阻断：${this.note.path}（${outcome.conflicts.join("；")}）`);
+        new Notice(`⛔ ${e.userMessage}${detail}`, 15000);
+        markBtn("⛔ 存在冲突 · 需人工解决", false);
+        return;
+      }
       const msg = (e as Error).message;
       log.warn(`SVN 提交失败：${msg.slice(0, 300)}`);
       new Notice(`SVN 提交失败：${msg.slice(0, 200)}`, 8000);

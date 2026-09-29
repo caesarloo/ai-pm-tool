@@ -11,12 +11,12 @@ import { App, Notice, Setting, TFile } from "obsidian";
 import type AIPMTool from "../main";
 import { type RequirementNote } from "../types";
 import { parseRequirementNote, formatListValue, formatInlineValue } from "../notes/parser";
-import { SvnClient, type SvnDiff } from "@caesarloo/simple-svn-client";
-import { vaultBasePath } from "../utils/path";
+import type { SvnDiff } from "@caesarloo/simple-svn-client";
 import { log } from "../utils/logger";
+import { assertNoConflictBefore, autoMergeIfSafe, commitGuarded, createSvnClient } from "../utils/svnGuard";
+import { isConflictBlocked } from "../utils/svnConflictText";
 import { MailModal } from "./MailModal";
 import { loadSvnDiff, renderSvnDiffBox } from "./svnDiffPreview";
-import { runSvnSerialized } from "../utils/svnQueue";
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -418,19 +418,25 @@ export class ProgressPanel {
         if (newV === oldV) continue;
         content = updateFrontmatter(content, f.source, newV, f.style === "list" ? "list" : "inline");
       }
+      // fail-closed：写盘前查冲突 —— 命中即拒绝写入（不写盘、不提交、不派发 onSubmitted）
+      await assertNoConflictBefore(this.app, this.note.path, content);
       await this.app.vault.modify(file, content);
       log.debug(`进展已写入笔记 ${this.note.path}`);
 
-      // svn commit（运行于装有 svn 的主机；不可用时提示但不回滚笔记写入）；经全局单飞队列串行执行
-      const cwd = vaultBasePath(this.app);
-      log.debug(`准备 svn commit，cwd=${cwd} path=${this.note.path}`);
-      const client = new SvnClient(cwd);
+      // svn commit（运行于装有 svn 的主机；冲突即阻断，不做「写完只提示」的放行）；经全局单飞队列串行执行
+      log.debug(`准备 svn commit，path=${this.note.path}`);
+      const client = createSvnClient(this.app);
       if (await client.isAvailable()) {
         try {
-          await runSvnSerialized(() => client.commit([this.note.path], `更新进展：${this.note.name}`, { autoAdd: true }));
+          await commitGuarded(this.app, [this.note.path], `更新进展：${this.note.name}`);
           log.debug(`svn commit 成功：${this.note.path}`);
           new Notice(`已提交 SVN：${this.note.path}`, 4000);
         } catch (e) {
+          if (isConflictBlocked(e)) {
+            // 不推进环节（不派发 onSubmitted）、不关闭面板：保持「未提交」可见
+            await this.resolveConflictOrBlock(e);
+            return;
+          }
           const msg = (e as Error).message;
           log.warn(`SVN 提交失败：${msg.slice(0, 300)}`);
           new Notice(`笔记已写入但 SVN 提交失败：${msg.slice(0, 300)}`, 8000);
@@ -442,11 +448,37 @@ export class ProgressPanel {
       this.onSubmitted?.();
       await this.refreshFromDisk();
     } catch (e) {
+      if (isConflictBlocked(e)) {
+        // fail-closed：写盘前命中冲突 → 未写盘、未提交、未派发 onSubmitted；面板保持打开
+        await this.resolveConflictOrBlock(e);
+        return;
+      }
       log.error("进展提交异常", e);
       new Notice(`提交失败：${(e as Error).message}`, 8000);
     } finally {
       this.submitting = false;
     }
+  }
+
+  /**
+   * 冲突处置（fail-closed + 安全自动合并）
+   * - 先尝试结构感知自动合并（仅「单侧改动」可自动；双边改动一律拒绝）
+   * - 合并成功：写盘并清除冲突状态，提示用户**核对内容后再点一次提交**（人工确认后才入库）
+   * - 合并失败：明确阻断，并列出需人工决定的字段 / 小节
+   */
+  private async resolveConflictOrBlock(e: unknown): Promise<void> {
+    const outcome = await autoMergeIfSafe(this.app, this.note.path);
+    if (outcome.merged) {
+      log.info(`进展提交：已自动合并冲突 ${this.note.path}（取舍 ${outcome.decisions.length} 项）`);
+      new Notice(
+        `已自动合并本地与仓库的改动（${outcome.decisions.length} 处取舍）。请核对内容后再次点击「提交」。`,
+        12000
+      );
+      return;
+    }
+    const detail = outcome.conflicts.length > 0 ? `；自动合并未执行：${outcome.conflicts.join("；")}` : "";
+    log.error(`SVN 冲突未自动合并：${this.note.path}（${outcome.conflicts.join("；")}）`);
+    new Notice(`${(e as Error).message}${detail}`, 15000);
   }
 
   /** 邮件发送回写后刷新本面板（节点标志、时间轴、当前环节变化；SVN 变更预览重新加载） */

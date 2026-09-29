@@ -33,9 +33,9 @@ import {
   type CheckResult,
   type VLevel,
 } from "../review/checks";
-import { SvnClient } from "@caesarloo/simple-svn-client";
-import { vaultBasePath } from "../utils/path";
 import { log } from "../utils/logger";
+import { assertNoConflictBefore, autoMergeIfSafe, commitGuarded, createSvnClient } from "../utils/svnGuard";
+import { isConflictBlocked } from "../utils/svnConflictText";
 import { runSvnSerialized } from "../utils/svnQueue";
 import type { ChatMessage } from "../llm/gateway";
 import { isRetryableLlmError } from "../llm/retry";
@@ -1769,12 +1769,14 @@ export class RequirementCreateModal extends Modal {
         }
         oldPath = file.path;
       }
+      // fail-closed（SVN 环节）：提交前先校验冲突 —— 命中即拒绝整次提交（不写盘、不提交、不转工作台）
+      await assertNoConflictBefore(this.app, file.path, this.bodyText);
       // 写回：rename（若变）+ 键级写变化键 + 正文（若变）
       const res = await this.writeDisk({ onTaken: "notice" });
       const f = res.file;
       if (res.renamed && oldPath) {
         // 旧路径曾纳入版本控制（svn 记录 missing）→ 标记删除随本次提交；未版本化时报错忽略
-        const pre = new SvnClient(vaultBasePath(this.app));
+        const pre = createSvnClient(this.app);
         if (await pre.isAvailable()) {
           try {
             await runSvnSerialized(() => pre.delete([oldPath]));
@@ -1783,18 +1785,22 @@ export class RequirementCreateModal extends Modal {
           }
         }
       }
-      // svn commit（运行于装有 svn 的主机；新文件 autoAdd；重命名时一并提交旧路径删除）
-      const cwd = vaultBasePath(this.app);
-      const client = new SvnClient(cwd);
+      // svn commit（运行于装有 svn 的主机；新文件 autoAdd；重命名时一并提交旧路径删除；冲突即阻断）
+      const client = createSvnClient(this.app);
       const paths = res.renamed ? [f.path, oldPath] : [f.path];
       const msg = this.mode === "create" ? `新增需求：${newName}` : `更新需求：${newName}`;
       if (await client.isAvailable()) {
         try {
-          await runSvnSerialized(() => client.commit(paths, msg, { autoAdd: true }));
+          await commitGuarded(this.app, paths, msg);
           log.debug(`需求已提交 SVN：${f.path}`);
           new Notice(`已提交 SVN：${f.path}`, 4000);
           await this.afterCommitOk(f);
         } catch (e) {
+          if (isConflictBlocked(e)) {
+            // 不转工作台、不派发 onDone：内容已写盘但未提交，保持「未提交」可见
+            await this.resolveConflictOrBlock(e, f.path);
+            return;
+          }
           const m = (e as Error).message;
           log.warn(`需求 SVN 提交失败：${m.slice(0, 300)}`);
           new Notice(`笔记已写入但 SVN 提交失败：${m.slice(0, 300)}（可稍后在评审页重试或手动提交）`, 8000);
@@ -1806,11 +1812,37 @@ export class RequirementCreateModal extends Modal {
         await this.afterCommitOk(f);
       }
     } catch (e) {
+      if (isConflictBlocked(e)) {
+        // fail-closed：写盘前命中冲突 → 未写盘、未提交、未转工作台
+        await this.resolveConflictOrBlock(e, file.path);
+        return;
+      }
       log.error("需求提交异常", e);
       new Notice(`提交失败：${(e as Error).message}`, 8000);
     } finally {
       this.busy = false;
     }
+  }
+
+  /**
+   * 冲突处置（fail-closed + 安全自动合并）
+   * - 先尝试结构感知自动合并（仅「单侧改动」可自动；双边改动一律拒绝）
+   * - 合并成功：写盘并清除冲突状态，提示用户**核对内容后再点一次提交**（人工确认后才入库）
+   * - 合并失败：明确阻断，并列出需人工决定的字段 / 小节
+   */
+  private async resolveConflictOrBlock(e: unknown, path: string): Promise<void> {
+    const outcome = await autoMergeIfSafe(this.app, path);
+    if (outcome.merged) {
+      log.info(`需求提交：已自动合并冲突 ${path}（取舍 ${outcome.decisions.length} 项）`);
+      new Notice(
+        `已自动合并本地与仓库的改动（${outcome.decisions.length} 处取舍）。请核对内容后再次点击「提交」。`,
+        12000
+      );
+      return;
+    }
+    const detail = outcome.conflicts.length > 0 ? `；自动合并未执行：${outcome.conflicts.join("；")}` : "";
+    log.error(`SVN 冲突未自动合并：${path}（${outcome.conflicts.join("；")}）`);
+    new Notice(`${(e as Error).message}${detail}`, 15000);
   }
 
   /** 内容已落盘后的统一收尾：create → 原地转入需求工作台（detail）；detail → 刷新面板（评审提交可能改了文件名） */

@@ -9,15 +9,15 @@
  *   - frontmatter 与正文都有变更时，两者之间插入分割线
  */
 import { App } from "obsidian";
-import { SvnClient, type SvnDiff } from "@caesarloo/simple-svn-client";
-import { vaultBasePath } from "../utils/path";
+import type { SvnDiff } from "@caesarloo/simple-svn-client";
 import { log } from "../utils/logger";
+import { createSvnClient } from "../utils/svnGuard";
 import { runSvnSerialized } from "../utils/svnQueue";
 
 /** 加载 SVN 未提交变更（svn diff 工作副本 vs BASE）；svn 不可用/读取失败返回 null；经全局单飞队列串行执行（.svn 锁并发会互等超时） */
 export async function loadSvnDiff(app: App, notePath: string): Promise<SvnDiff | null> {
   return runSvnSerialized(async () => {
-    const client = new SvnClient(vaultBasePath(app));
+    const client = createSvnClient(app);
     try {
       if (!(await client.isAvailable())) return null;
       return await client.diff(notePath);
