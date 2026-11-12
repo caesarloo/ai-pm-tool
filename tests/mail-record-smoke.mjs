@@ -1,6 +1,7 @@
 /**
- * mailRecord 冒烟测试：邮件发送记录回写（新增/替换小节）+ 表格前空行规范化
+ * mailRecord 冒烟测试：邮件发送记录回写（新增/替换小节）+ 表格前空行规范化 + 整条记录 quote callout 存档
  * - 表格前空行是硬性要求：缺空行时 Obsidian 不把 `| a | b |` 渲染成表格（退化为普通文本行）
+ * - 记录以 quote callout 存档：`邮件发送时间：` 与附件行在 callout 外，收件人/抄送/主题/正文在 callout 内
  * 运行：node tests/mail-record-smoke.mjs（经 esbuild 打包后执行，见 package.json test 脚本）
  */
 import { build } from "esbuild";
@@ -44,7 +45,7 @@ await build({
   logLevel: "silent",
 });
 const mod = await import(pathToFileURL(outFile).href);
-const { upsertMailRecord, ensureBlankLineBeforeTables, toObsidianQuote } = mod;
+const { upsertMailRecord, ensureBlankLineBeforeTables, toObsidianQuote, buildMailRecord } = mod;
 
 // ===== 用例 =====
 console.log("1. ensureBlankLineBeforeTables 基本行为");
@@ -154,45 +155,84 @@ ok(round2.content.includes("## 开发评审邮件\n\n邮件发送时间：2026-0
 ok(round2.content.includes("## 结尾说明\n\n别丢了我"), "第二轮替换保留后续非邮件小节");
 eq(round2.content.split("## 上线审核邮件").length - 1, 1, "第二轮替换不产生重复标题");
 
-console.log("8. 邮件正文 → Obsidian 引用块（toObsidianQuote）");
-eq(toObsidianQuote("各位好：\n请知悉。"), "\n> 各位好：\n> 请知悉。\n", "多行正文 → 每行加 `> ` 前缀（首尾各留空行）");
-eq(toObsidianQuote("各位好：\n\n请知悉。"), "\n> 各位好：\n>\n> 请知悉。\n", "空行写成 `>`（引用块连续，不被空行截断）");
+console.log("8. 记录文本 → Obsidian quote callout（toObsidianQuote）");
+eq(toObsidianQuote("各位好：\n请知悉。"), "\n> [!quote]\n> 各位好：\n> 请知悉。\n", "首行为 `> [!quote]`，其后正文每行加 `> ` 前缀（首尾各留空行）");
+eq(toObsidianQuote("各位好：\n\n请知悉。"), "\n> [!quote]\n> 各位好：\n>\n> 请知悉。\n", "空行写成 `>`（callout 连续，不被空行截断）");
 eq(toObsidianQuote(""), "", "空正文 → 空字符串（不产出空引用条）");
 eq(toObsidianQuote("  \n\n"), "", "全空白正文 → 空字符串");
 eq(
   toObsidianQuote(`说明文字\n${TABLE}`),
-  "\n> 说明文字\n>\n> | 项目 | 结论 |\n> | --- | --- |\n> | 上线审核 | 通过 |\n",
-  "表格前补 `>` 空行（引用块内表格渲染前提）",
+  "\n> [!quote]\n> 说明文字\n>\n> | 项目 | 结论 |\n> | --- | --- |\n> | 上线审核 | 通过 |\n",
+  "表格前补 `>` 空行（callout 内表格渲染前提）",
 );
 eq(
   toObsidianQuote(TABLE),
-  "\n>\n> | 项目 | 结论 |\n> | --- | --- |\n> | 上线审核 | 通过 |\n",
-  "正文首行即表格 → 块首补 `>` 空行",
+  "\n> [!quote]\n>\n> | 项目 | 结论 |\n> | --- | --- |\n> | 上线审核 | 通过 |\n",
+  "正文首行即表格 → callout 头之后补 `>` 空行",
 );
-eq(toObsidianQuote("第一行\r\n第二行"), "\n> 第一行\n> 第二行\n", "CRLF 归一为 LF（不把 \\r 带进引用行）");
-eq(toObsidianQuote("第一行\r第二行"), "\n> 第一行\n> 第二行\n", "裸 CR 同样归一（不产生孤立引用行）");
+eq(toObsidianQuote("第一行\r\n第二行"), "\n> [!quote]\n> 第一行\n> 第二行\n", "CRLF 归一为 LF（不把 \\r 带进引用行）");
+eq(toObsidianQuote("第一行\r第二行"), "\n> [!quote]\n> 第一行\n> 第二行\n", "裸 CR 同样归一（不产生孤立引用行）");
+const QUOTE_SAMPLE = toObsidianQuote("各位好：\n\n请知悉。");
+eq(QUOTE_SAMPLE.split("> [!quote]").length - 1, 1, "callout 头只出现一次");
+ok(
+  QUOTE_SAMPLE.replace(/^\n/, "").replace(/\n$/, "").split("\n").every((l) => l.startsWith(">")),
+  "callout 块内每一行都以 `>` 开头（无裸行漏出 callout）",
+);
 
-console.log("9. 完整回写形态：元信息与附件在引用块外，仅邮件正文进引用");
+console.log("9. 整条记录组装（buildMailRecord）：时间行/附件行在 callout 外，收件人/抄送/主题/正文在 callout 内");
 const BODY_MD = ["各位好：", "", "现将审核结论同步如下：", TABLE, "请知悉。"].join("\n");
-const RECORD_WITH_QUOTE = [
-  "邮件发送时间：2026-09-18 10:00",
-  "收件人：张三（zhangsan@example.com）",
-  "主题：上线审核",
-  "正文（文本存档）：",
-  toObsidianQuote(BODY_MD),
-  "附件：结论.pdf",
-].join("\n");
+const RECORD_WITH_QUOTE = buildMailRecord({
+  time: "2026-09-18 10:00",
+  recipients: "张三（zhangsan@example.com）；李四（lisi@example.com）",
+  cc: "支付产研（XJZF_cy@suning.com）",
+  subject: "上线审核",
+  body: BODY_MD,
+  attachments: ["结论.pdf"],
+});
+eq(
+  RECORD_WITH_QUOTE,
+  [
+    "邮件发送时间：2026-09-18 10:00",
+    "> [!quote]",
+    "> 收件人：张三（zhangsan@example.com）；李四（lisi@example.com）",
+    "> 抄送：支付产研（XJZF_cy@suning.com）",
+    "> 主题：上线审核",
+    "> 正文（文本存档）：",
+    "> 各位好：",
+    ">",
+    "> 现将审核结论同步如下：",
+    ">",
+    "> | 项目 | 结论 |",
+    "> | --- | --- |",
+    "> | 上线审核 | 通过 |",
+    "> 请知悉。",
+    "",
+    "附件：结论.pdf",
+  ].join("\n"),
+  "与既有笔记同形态：时间行紧贴 callout 头、整条记录在 callout 内、附件行在 callout 外",
+);
 const full = upsertMailRecord("# 需求笔记\n\n## 背景\n\n正文段落。", "上线审核", RECORD_WITH_QUOTE);
-ok(full.content.includes("邮件发送时间：2026-09-18 10:00\n收件人：张三（zhangsan@example.com）"), "元信息保持普通行（不被引用）");
-ok(full.content.includes("主题：上线审核\n正文（文本存档）：\n\n> 各位好："), "引用块与标签行之间留空行");
-ok(full.content.includes("> 现将审核结论同步如下：\n>\n> | 项目 | 结论 |"), "引用块内表格前有 `>` 空行");
-ok(full.content.includes("> | 上线审核 | 通过 |\n> 请知悉。"), "表格块在引用块内未被拆散");
-ok(full.content.includes("> 请知悉。\n\n附件：结论.pdf"), "附件行在引用块外（留空行隔开）");
+ok(full.content.includes("## 上线审核邮件\n邮件发送时间：2026-09-18 10:00\n> [!quote]\n> 收件人："), "新增小节：标题 → 时间行 → callout 头，三者紧邻（无空行）");
+ok(!/^收件人：/m.test(full.content.split("> [!quote]")[0]), "收件人行只出现在 callout 内（callout 之外无裸元信息行）");
+ok(!/^主题：/m.test(full.content.split("> [!quote]")[0]), "主题行只出现在 callout 内");
+const timeMatch = /邮件发送时间：\s*([^\r\n]+)/.exec(full.content);
+ok(timeMatch !== null && timeMatch[1] === "2026-09-18 10:00", "时间轴判据仍能从未加前缀的时间行读到发送时间");
+ok(full.content.includes("> 现将审核结论同步如下：\n>\n> | 项目 | 结论 |"), "callout 内表格前有 `>` 空行");
+ok(full.content.includes("> | 上线审核 | 通过 |\n> 请知悉。"), "表格块在 callout 内未被拆散");
+ok(full.content.includes("> 请知悉。\n\n附件：结论.pdf"), "附件行在 callout 外（留空行隔开）");
 eq(full.content.split("附件：结论.pdf").length - 1, 1, "附件行只出现一次");
-const noAttach = upsertMailRecord("# 需求笔记\n", "上线审核", ["邮件发送时间：2026-09-18 10:00", "正文（文本存档）：", toObsidianQuote("正文")].join("\n"));
-ok(noAttach.content.endsWith("> 正文\n"), "无附件时记录以引用块收尾（无多余空行）");
+eq(full.content.split("> [!quote]").length - 1, 1, "回写笔记里 callout 头只出现一次");
+const noCc = buildMailRecord({ time: "2026-09-18 10:00", recipients: "张三（zhangsan@example.com）", subject: "上线审核", body: "正文" });
+ok(!noCc.includes("抄送："), "无抄送 → 不输出「抄送：」行");
+ok(noCc.startsWith("邮件发送时间：2026-09-18 10:00\n> [!quote]\n> 收件人："), "无抄送时收件人行紧随 callout 头");
+const emptyBody = buildMailRecord({ time: "2026-09-18 10:00", recipients: "张三（zhangsan@example.com）", subject: "上线审核", body: "  \n" });
+eq(emptyBody, "邮件发送时间：2026-09-18 10:00\n> [!quote]\n> 收件人：张三（zhangsan@example.com）\n> 主题：上线审核\n> 正文（文本存档）：", "空正文 → 保留标签行、不产出空内容行");
+const noAttach = upsertMailRecord("# 需求笔记\n", "上线审核", buildMailRecord({ time: "2026-09-18 10:00", recipients: "张三（zhangsan@example.com）", subject: "上线审核", body: "正文" }));
+ok(noAttach.content.endsWith("> 正文\n"), "无附件时记录以 callout 正文收尾（无多余空行）");
 const replacedQuote = upsertMailRecord(full.content, "上线审核", RECORD_WITH_QUOTE);
-ok(!replacedQuote.content.includes("\n\n\n"), "重复回写不累积空行（引用块替换幂等）");
+ok(!replacedQuote.content.includes("\n\n\n"), "重复回写不累积空行（callout 替换幂等）");
+eq(replacedQuote.content.split("> [!quote]").length - 1, 1, "重复回写后 callout 头仍只有一个");
+ok(replacedQuote.content.includes("## 上线审核邮件\n邮件发送时间：2026-09-18 10:00\n> [!quote]\n> 收件人："), "重复回写后标题/时间行/callout 头的相邻关系不变");
 
 console.log("10. 小节边界判据修复（紧邻真标题 / 伪标题 / 白名单 / 冲突护栏）");
 const LABELS = ["需求评审", "工作量评估", "项目准入", "上线审核", "报备客服", "生产验证", "生产监控"];

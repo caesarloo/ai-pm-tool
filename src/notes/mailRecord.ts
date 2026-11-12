@@ -3,8 +3,10 @@
  * - 纯字符串逻辑（不依赖 obsidian），与 notes/parser.ts、notes/contacts.ts 同层，便于冒烟测试
  * - 回写内容里的表格必须能在 Obsidian 中正常渲染：Markdown 要求表格前留一个空行，
  *   否则整段会退化成普通文本行（邮件正文带表格时最常见，如审核结论表）
- * - 邮件正文以 Obsidian 引用块（`> ` 前缀）存档：正文与元信息（时间/收件人/主题）在视觉上分层，
- *   引用块内的表格同样要求前置空行，故先补空行再逐行加前缀（见 toObsidianQuote）
+ * - 邮件发送记录以 Obsidian quote callout 存档（§4.6，形态对齐既有笔记）：
+ *   `邮件发送时间：` 一行留在 callout 外（时间轴据此读取），收件人/抄送/主题/正文全部在 callout 内，
+ *   附件行留在 callout 外（附件名保持可搜索的普通文本）；见 buildMailRecord
+ *   callout 内的表格同样要求前置空行，故先补空行再逐行加前缀（见 toObsidianQuote）
  */
 
 // 冲突标记判据与冲突守卫共用同一真源（notes 与 utils 均为纯逻辑层）
@@ -44,21 +46,75 @@ export function ensureBlankLineBeforeTables(text: string): string {
 }
 
 /**
- * 邮件正文 → Obsidian 引用块（`> ` 前缀），供回写留痕使用（§4.6）：
- * - 空行写成 `>`（不带尾空格）：维持引用块连续，否则会被空行截断成多个引用块
- * - 引用块内的表格同样要求前置空行（Obsidian 不渲染紧贴文字的表格），故**先补空行再逐行加前缀**；
- *   补出的空行随即变成 `>`，即引用块内的前置空行；正文首行即表格时额外在块首补一个 `>` 空行
- * - 返回带首尾空行的块：与元信息行（时间/收件人/主题）、附件行隔开，避免引用块边界产生解析歧义
- * - 正文为空（或全空白）时返回空字符串：不产出空的引用条
+ * 任意记录文本 → Obsidian quote callout（首行 `> [!quote]`，其后各行 `> ` 前缀）：
+ * - callout 头占独立一行，内容从第二行起；每行加 `> ` 才留在 callout 内
+ * - 空行写成 `>`（不带尾空格）：维持 callout 连续，否则会被空行截断成多个块
+ * - callout 内的表格同样要求前置空行（Obsidian 不渲染紧贴文字的表格），故**先补空行再逐行加前缀**；
+ *   补出的空行随即变成 `>`，即 callout 内的前置空行；内容首行即表格时额外在内容首行补一个 `>` 空行
+ * - 返回带首尾空行的块：与调用方的相邻行（时间行/附件行）隔开，便于拼接
+ * - 内容为空（或全空白）时返回空字符串：不产出空的引用档
  */
 export function toObsidianQuote(text: string): string {
   // 先归一换行（裸 \r 不被 ensureBlankLineBeforeTables 的 split 处理），再去掉尾部空行
   const normalized = ensureBlankLineBeforeTables(text.replace(/\r\n?/g, "\n").trimEnd());
   if (normalized.trim() === "") return "";
   const lines = normalized.split("\n");
-  if (isTableRow(lines[0])) lines.unshift(""); // 引用块首行即表格 → 也要有前置空引用行
+  if (isTableRow(lines[0])) lines.unshift(""); // callout 正文首行即表格 → 也要有前置空引用行
   const quoted = lines.map((l) => (l.trim() === "" ? ">" : `> ${l}`)).join("\n");
-  return `\n${quoted}\n`;
+  return `\n> [!quote]\n${quoted}\n`;
+}
+
+/** buildMailRecord 输入：各字段已是可读文本（收件人/抄送由调用方用 formatRecipient 拼好） */
+export interface MailRecordInput {
+  /** 发送时间（`yyyy-MM-dd HH:mm`）：留在 callout 外，时间轴按此行读取 */
+  time: string;
+  /** 收件人（`姓名（邮箱）`，多个以「；」分隔） */
+  recipients: string;
+  /** 抄送（同上）；空时省略「抄送：」行 */
+  cc?: string;
+  /** 邮件主题 */
+  subject: string;
+  /** 邮件正文原文（未加 `> ` 前缀，可含空行/表格） */
+  body: string;
+  /** 附件名；空数组/全空白时省略「附件：」行 */
+  attachments?: readonly string[];
+}
+
+/**
+ * 组装一条邮件发送记录（§4.6；形态对齐既有笔记的 quote callout 记录）：
+ *
+ * ```
+ * 邮件发送时间：2026-09-17 10:17
+ * > [!quote]
+ * > 收件人：…
+ * > 抄送：…
+ * > 主题：…
+ * > 正文（文本存档）：
+ * > <正文各行>
+ *
+ * 附件：a；b
+ * ```
+ *
+ * - `邮件发送时间：` 留在 callout 外、与 callout **紧贴**（中间不留空行）：时间轴（ProgressModal）
+ *   按未加前缀的该行读取发送时间
+ * - 收件人/抄送/主题/正文在 callout 内：一条记录折叠成一个可读块
+ * - 附件行留在 callout 外：附件名保持可搜索的普通文本
+ * - 正文为空时保留「正文（文本存档）：」行（不产出空 callout 内容）
+ */
+export function buildMailRecord(input: MailRecordInput): string {
+  const bodyLines = input.body.trim() === "" ? [] : input.body.replace(/\r\n?/g, "\n").split("\n");
+  const inner = [
+    `收件人：${input.recipients}`,
+    ...(input.cc !== undefined && input.cc.trim() !== "" ? [`抄送：${input.cc}`] : []),
+    `主题：${input.subject}`,
+    `正文（文本存档）：`,
+    ...bodyLines,
+  ].join("\n");
+  // toObsidianQuote 返回「前导空行 + callout + 尾随空行」：去掉前导空行，让 callout 紧贴时间行
+  let record = `邮件发送时间：${input.time}\n${toObsidianQuote(inner).replace(/^\n/, "")}`;
+  const attachments = (input.attachments ?? []).map((n) => n.trim()).filter((n) => n !== "");
+  if (attachments.length > 0) record = `${record.trimEnd()}\n\n附件：${attachments.join("；")}`;
+  return record.trimEnd();
 }
 
 /** 去掉尾部「（…）」后缀：项目准入（开发准入）→ 项目准入 */
