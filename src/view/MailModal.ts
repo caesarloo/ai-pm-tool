@@ -590,21 +590,18 @@ export class MailModal extends Modal {
     // 正文图片：按 Obsidian 语义——粘贴/拖入 → 存进 vault 附件目录 + 光标处插入 `![[路径]]` 引用；
     // 发送时由 collectInlineImages 从 vault 读出、内嵌进邮件正文（不作附件）
     previewEl.addEventListener("paste", (ev) => {
-      const e = ev as ClipboardEvent;
-      const files = Array.from(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith("image/"));
+      const files = Array.from(ev.clipboardData?.files ?? []).filter((f) => f.type.startsWith("image/"));
       if (files.length === 0) return; // 纯文本粘贴走浏览器默认行为
-      e.preventDefault();
+      ev.preventDefault();
       void this.attachImagesAsReferences(files, serializePreview, renderPreview);
     });
     previewEl.addEventListener("dragover", (ev) => {
-      const e = ev as DragEvent;
-      if (Array.from(e.dataTransfer?.items ?? []).some((i) => i.kind === "file")) e.preventDefault();
+      if (Array.from(ev.dataTransfer?.items ?? []).some((i) => i.kind === "file")) ev.preventDefault();
     });
     previewEl.addEventListener("drop", (ev) => {
-      const e = ev as DragEvent;
-      const files = Array.from(e.dataTransfer?.files ?? []).filter((f) => f.type.startsWith("image/"));
+      const files = Array.from(ev.dataTransfer?.files ?? []).filter((f) => f.type.startsWith("image/"));
       if (files.length === 0) return;
-      e.preventDefault();
+      ev.preventDefault();
       void this.attachImagesAsReferences(files, serializePreview, renderPreview);
     });
     renderPreview();
