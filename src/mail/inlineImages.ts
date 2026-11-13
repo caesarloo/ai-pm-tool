@@ -41,6 +41,25 @@ export function imageMimeByPath(path: string): string | null {
   return IMAGE_MIME[ext] ?? null;
 }
 
+/**
+ * Obsidian 渲染出来的内嵌元素（`span.internal-embed`，属性 `src`/`alt`）→ 还原成 wikilink 引用。
+ *
+ * 邮件编辑框是 contenteditable 的 Markdown 预览：图片粘贴后被渲染成 `span.internal-embed`（里面才是 img），
+ * 而「预览 DOM → Markdown」的序列化器只认文本类元素；若不还原，第二次粘贴/编辑触发序列化时已渲染的图片会被
+ * 当成空元素丢掉——表现为「粘贴第二张图时第一张消失」（2026-11-13 用户反馈）。
+ *
+ * 非内嵌元素返回 null。`alt` 仅在它是别名（不等于路径 basename / 去扩展名文件名）时写回 `|别名`，
+ * 避免把 `![[a.png]]` 改写成 `![[a.png|a]]`。
+ */
+export function embedRefFromElement(className: string | null, src: string | null, alt: string | null): string | null {
+  const classes = (className ?? "").split(/\s+/);
+  if (!classes.includes("internal-embed") || !src) return null;
+  const base = src.split("/").pop() ?? src;
+  const stem = base.replace(/\.[^./]+$/, "");
+  const alias = alt && alt !== src && alt !== base && alt !== stem ? `|${alt}` : "";
+  return `![[${src}${alias}]]`;
+}
+
 /** 去掉 Markdown 图片目标的尖括号 / 标题 / URL 编码；外链返回 null（不内嵌） */
 export function normalizeImageTarget(raw: string): string | null {
   let t = raw.trim();

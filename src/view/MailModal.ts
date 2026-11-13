@@ -29,7 +29,7 @@ import { loadContactBook, formatRecipient, appendContactToBook, type ContactBook
 import { buildMailRecord, upsertMailRecord } from "../notes/mailRecord";
 import { updateFrontmatter } from "./ProgressModal";
 import { sendMail, isValidEmailAddr, type MailAttachment } from "../mail/smtp";
-import { collectInlineImages } from "../mail/inlineImages";
+import { collectInlineImages, embedRefFromElement } from "../mail/inlineImages";
 import { log } from "../utils/logger";
 import { autoMergeIfSafe, commitGuarded, createSvnClient } from "../utils/svnGuard";
 import { isConflictBlocked } from "../utils/svnConflictText";
@@ -509,6 +509,8 @@ export class MailModal extends Modal {
       void MarkdownRenderer.render(this.app, this.draft.body, previewEl, this.note.path, comp);
     };
     // 预览 DOM → Markdown（与转换器互逆；Obsidian 渲染的待办是 input[type=checkbox]）
+    // 注意：渲染后的 `![[...]]` 图片是 `span.internal-embed`（内部才是 img），必须还原成引用，
+    // 否则下一次序列化会把已渲染的图片当成空元素丢掉（粘贴第二张图时第一张消失的根因，2026-11-13 修复）。
     const walkInline = (node: ChildNode): string => {
       let out = "";
       for (const c of Array.from(node.childNodes)) {
@@ -523,7 +525,15 @@ export class MailModal extends Modal {
         else if (tag === "CODE") out += "`" + walkInline(el) + "`";
         else if (tag === "A") out += `[${walkInline(el)}](${el.getAttribute("href") ?? ""})`;
         else if (tag === "BR") out += "  \n";
-        else out += walkInline(el); // span/input 等：input 无文本自动忽略
+        else {
+          const ref = embedRefFromElement(el.getAttribute("class"), el.getAttribute("src"), el.getAttribute("alt"));
+          if (ref !== null) out += ref;
+          else if (tag === "IMG") {
+            // 外链图片（非 vault 内嵌，渲染成裸 img）还原 markdown 语法；vault 图片由上面的 internal-embed 分支处理
+            const src = el.getAttribute("src") ?? "";
+            if (/^https?:/i.test(src)) out += `![](${src})`;
+          } else out += walkInline(el); // span/input 等：input 无文本自动忽略
+        }
       }
       return out;
     };
@@ -532,6 +542,12 @@ export class MailModal extends Modal {
       for (const child of Array.from(el.children)) {
         const e = child as HTMLElement;
         const tag = e.tagName;
+        // 渲染后的内嵌元素（图片/音视频/笔记嵌入）：还原成 `![[...]]` 引用，避免被当成空元素丢掉
+        const emb = embedRefFromElement(e.getAttribute("class"), e.getAttribute("src"), e.getAttribute("alt"));
+        if (emb !== null) {
+          blocks.push(emb);
+          continue;
+        }
         if (/^H[1-4]$/.test(tag)) {
           blocks.push(`${"#".repeat(Number(tag[1]))} ${walkInline(e).trim()}`);
           continue;

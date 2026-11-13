@@ -142,6 +142,31 @@ console.log("7. 读取失败（文件被删）不阻塞");
   ok(r.body.includes("![[a.png]]"), "原文保留，不丢内容");
 }
 
+console.log("8. 预览 DOM 内嵌元素（span.internal-embed）还原为引用");
+eq(
+  m.embedRefFromElement("internal-embed media-embed image-embed is-loaded", "Attachments/a.png", "a"),
+  "![[Attachments/a.png]]",
+  "无别名：还原 wikilink"
+);
+eq(
+  m.embedRefFromElement("internal-embed image-embed", "附件/中文 图.jpg", "中文 图.jpg"),
+  "![[附件/中文 图.jpg]]",
+  "alt 等于文件名：不写成别名"
+);
+eq(
+  m.embedRefFromElement("internal-embed image-embed", "Attachments/a.png", "示意图"),
+  "![[Attachments/a.png|示意图]]",
+  "alt 是别名：保留 |别名"
+);
+eq(m.embedRefFromElement("internal-embed", "x.png", ""), "![[x.png]]", "空 alt 不写别名");
+eq(m.embedRefFromElement("internal-link", "x.png", "x"), null, "非内嵌元素返回 null");
+eq(m.embedRefFromElement("internal-embed", null, "x"), null, "缺 src 返回 null");
+{
+  // 回归：粘贴第二张图时，第一张已渲染成 internal-embed，序列化必须还原它而不是丢掉
+  const first = m.embedRefFromElement("internal-embed media-embed image-embed is-loaded", "Attachments/a.png", "a");
+  ok(first === "![[Attachments/a.png]]", "已渲染的图片仍能被序列化回引用（不再丢图）");
+}
+
 rmSync(outDir, { recursive: true, force: true });
 console.log(`\n结果：${passed} 通过，${failed} 失败`);
 if (failed > 0) process.exit(1);
