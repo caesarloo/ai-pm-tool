@@ -694,6 +694,9 @@ a.ai-pm-pick-name:hover {
   display: flex;
   align-items: center;
   gap: 4px;
+  /* 右侧给 Obsidian 原生关闭按钮（absolute 定位在弹窗右上角：top/right 约 6px、尺寸约 24px）让位，
+     否则「最大化」按钮会与右上角 ✕ 叠在一起（0.3.1 用户反馈修复）。36px 取最坏情况（滚动条主题为 12px 偏移）再加 4px 间隔。 */
+  margin-inline-end: 36px;
 }
 .ai-pm-mail-maxbtn {
   width: 26px;
@@ -899,9 +902,9 @@ a.ai-pm-pick-name:hover {
   border-radius: 4px;
   margin: 6px 0;
 }
-/* 附件区提示（图片走正文内嵌、附件用于文件） */
+/* 正文与附件之间的提示（图片走正文内嵌、附件用于文件）：独立整行，不参与附件字段的 flex 排布 */
 .ai-pm-mail-hint {
-  margin: 2px 0 6px;
+  margin: 6px 0 10px;
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-muted);

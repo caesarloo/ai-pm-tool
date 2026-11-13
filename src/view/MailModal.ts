@@ -606,14 +606,17 @@ export class MailModal extends Modal {
     });
     renderPreview();
 
+    // 图片粘贴提示：独立一整行，放在正文与附件之间。
+    // 此前它挂在附件字段（flex 横排）里当第三列，被挤在附件右侧并把附件区压窄——0.3.1 用户反馈修复。
+    mail.createDiv({
+      cls: "ai-pm-mail-hint",
+      text: "提示：图片可直接粘贴/拖入上方正文——图片会存进 vault 并以内嵌图随邮件正文发出，无需作为附件；附件用于 PDF/Office 等文件。",
+    });
+
     // 附件（无固定模板，全部手动上传）
     const aField = mail.createDiv({ cls: "ai-pm-mail-field" });
     aField.createDiv({ cls: "ai-pm-mail-lb", text: "附件" });
     const aVal = aField.createDiv({ cls: "ai-pm-mail-val" });
-    aField.createDiv({
-      cls: "ai-pm-mail-hint",
-      text: "提示：图片可直接粘贴/拖入上方正文——图片会存进 vault 并以内嵌图随邮件正文发出，无需作为附件；附件用于 PDF/Office 等文件。",
-    });
     const attBox = aVal.createDiv({ cls: "ai-pm-mail-att" });
     if (this.atts.length === 0) {
       attBox.createDiv({ text: "无附件，点击下方按钮添加（随邮件一并发送，可一次多选）", cls: "ai-pm-mail-muted" });
