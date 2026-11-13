@@ -15,7 +15,7 @@ Full disclosure of what this plugin does on your system:
 - **Shell execution** ⚠️ — calls the system **`svn` command-line client** via Node `child_process.execFile` (no shell parsing, fixed argument arrays only). It runs **only when you actively trigger** an SVN operation (manual sync / "Commit to SVN" / snapshot comparison), and only commands against your SVN working copy. Input is validated to block injection and path traversal; passwords are masked in logs. `svn` is never bundled or downloaded — you install it yourself.
 - **Vault enumeration** — scans **Markdown files only inside the directories you configure** (requirement directory, template directory) to parse frontmatter for the project overview. The file pickers in settings (requirement-note template, contact book, rule files) list **every Markdown file in the vault** — no directory restriction — and **only while you have such a picker open**; no content is read until you pick a file.
 - **Vault read** ✅ — reads individual vault files through the Obsidian API (`vault.read` / `vault.cachedRead`).
-- **Vault write** ✅ — creates / modifies vault files through the Obsidian API (`vault.modify` / `vault.create`), only for actions you confirm in the UI (sample generation, frontmatter updates, sent-mail records). The **"✨ Add requirement"** flow calls the **Templater** plugin's API (only if you have it installed & enabled) to really execute your requirement template into a new note in your requirement directory; closing the dialog without committing keeps the note file (content saved, never deleted) for later editing / SVN commit.
+- **Vault write** ✅ — creates / modifies vault files through the Obsidian API (`vault.modify` / `vault.create`), only for actions you confirm in the UI (sample generation, frontmatter updates, sent-mail records, and images you paste or drop into a mail draft, which are saved into your Obsidian attachment folder). The **"✨ Add requirement"** flow calls the **Templater** plugin's API (only if you have it installed & enabled) to really execute your requirement template into a new note in your requirement directory; closing the dialog without committing keeps the note file (content saved, never deleted) for later editing / SVN commit.
 - **Network** — SMTP outbound only when you configure it and click send; LLM API calls only to providers you configure (API keys stored in the system keychain via SecretStorage). No telemetry, no analytics, no clipboard access.
 
 **Why the plugin invokes the system `svn` command**
@@ -72,7 +72,7 @@ Fields are written back **key-by-key against the baseline at open time** — unt
 
 #### Milestone emails
 
-From a milestone node: ① **LLM draft** (falls back to a template when no model is configured) → ② **preview & edit** (recipients from your contact book + stakeholders, subject/body editable, attachments per-file) → ③ **send & record** (flags the milestone, archives the sent email record in the note as an Obsidian quote callout (`> [!quote]`): send time and attachment names stay outside the callout, while recipients, CC, subject and body sit inside it, then commit to SVN). Configure SMTP in Settings to actually send; without SMTP the flow only records the draft as sent-acknowledged.
+From a milestone node: ① **LLM draft** (falls back to a template when no model is configured) → ② **preview & edit** (recipients from your contact book + stakeholders, subject/body editable, attachments multi-selectable) → ③ **send & record** (flags the milestone, archives the sent email record in the note as an Obsidian quote callout (`> [!quote]`): send time and attachment names stay outside the callout, while recipients, CC, subject and body sit inside it, then commit to SVN). **Body images**: paste or drop images straight into the body — they are saved into your Obsidian attachment folder and inserted as `![[...]]` references, then **embedded into the mail body itself** (multipart/related + Content-ID, not sent as attachments) when you send; use attachments for PDF/Office files. The dialog can be maximized for long bodies (⛶ in the title bar or double-click the title). Configure SMTP in Settings to actually send; without SMTP the flow only records the draft as sent-acknowledged.
 
 #### Add requirement (✨)
 
@@ -102,7 +102,7 @@ Settings → add an OpenAI-compatible provider (base URL, model, API key — sto
 - **执行系统命令** ⚠️ — 通过 Node `child_process.execFile` 调用系统 **`svn` 命令行客户端**（无 shell 解析，仅固定参数数组）。仅在您**主动触发** SVN 操作时执行（手动同步 / 「提交SVN」/ 快照对比），且只对您的 SVN 工作副本执行命令；输入经校验以拦截命令注入与路径穿越，日志中的密码参数会被脱敏。插件不捆绑 svn，需您自行安装。
 - **枚举 vault 文件** — 仅扫描**您配置的目录**（需求笔记目录、模板目录）下的 Markdown 文件，解析 frontmatter 用于项目总览；设置页的文件选择器（需求笔记模板、通讯录名单、规则文件等）在您主动打开时列出**整个仓库**的 Markdown 文件名（不限目录，任意层级的文件都能搜到）；未选择前不读取任何文件内容。
 - **读取 vault 文件** ✅ — 通过 Obsidian API 读取单个文件（`vault.read` / `vault.cachedRead`）。
-- **写入 vault 文件** ✅ — 通过 Obsidian API 创建/修改文件（`vault.modify` / `vault.create`），仅限您在界面中确认的操作（生成示例、frontmatter 更新、发送记录留痕）。**「✨ 新增需求」**会调用 **Templater** 插件 API（仅当您已安装并启用 Templater 时）在需求目录中真实执行您的需求模板新建笔记；**未提交 SVN 直接关闭弹窗时会保留该笔记文件**（内容已落盘、不会删除），供稍后编辑或手动提交。
+- **写入 vault 文件** ✅ — 通过 Obsidian API 创建/修改文件（`vault.modify` / `vault.create`），仅限您在界面中确认的操作（生成示例、frontmatter 更新、发送记录留痕、邮件正文里粘贴/拖入的图片按 Obsidian 附件目录规则落盘）。**「✨ 新增需求」**会调用 **Templater** 插件 API（仅当您已安装并启用 Templater 时）在需求目录中真实执行您的需求模板新建笔记；**未提交 SVN 直接关闭弹窗时会保留该笔记文件**（内容已落盘、不会删除），供稍后编辑或手动提交。
 - **网络** — 仅在您配置 SMTP 并点击发送时出站发信；仅向您配置的 LLM provider 发起 API 调用（密钥经 SecretStorage 存系统密钥库）。无遥测、无统计、无剪贴板访问。
 
 **为何需要调用系统 `svn` 命令**
@@ -159,7 +159,7 @@ SVN 是独立版本控制系统，Obsidian 的 API 无法驱动它。同步 / �
 
 #### 节点邮件
 
-从进展页节点进入：① **LLM 生成草稿**（未配置模型时降级用模板草稿）→ ② **预览确认**（收件人来自通讯录+干系人，主题/正文可编辑、附件单独添加/移除）→ ③ **发送回写**（标记环节、正文发送记录存档（发送记录以 Obsidian quote callout `> [!quote]` 存档：发送时间与附件名留在 callout 外，收件人/抄送/主题/正文在 callout 内）、提交 SVN）。设置中配置 SMTP 后真实发信；未配置则仅回写留痕。
+从进展页节点进入：① **LLM 生成草稿**（未配置模型时降级用模板草稿）→ ② **预览确认**（收件人来自通讯录+干系人，主题/正文可编辑、附件可一次多选）→ ③ **发送回写**（标记环节、正文发送记录存档（发送记录以 Obsidian quote callout `> [!quote]` 存档：发送时间与附件名留在 callout 外，收件人/抄送/主题/正文在 callout 内）、提交 SVN）。**正文图片**：图片可直接粘贴/拖入正文——按 Obsidian 语义存进 vault 附件目录并插入 `![[引用]]`，发送时**内嵌进邮件正文**（multipart/related + Content-ID，不作附件）；附件用于 PDF/Office 等文件。长邮件编辑可点标题栏「⛶」或双击标题栏最大化窗口。设置中配置 SMTP 后真实发信；未配置则仅回写留痕。
 
 #### 新增需求（✨）
 

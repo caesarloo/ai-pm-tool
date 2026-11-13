@@ -676,6 +676,53 @@ a.ai-pm-pick-name:hover {
   overflow-y: auto;
 }
 
+/* ===== 宽弹窗标题栏：最大化 / 还原（0.3.0，长邮件正文编辑用） ===== */
+.modal.ai-pm-modal-wide .modal-title.ai-pm-mail-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ai-pm-mail-title-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-pm-mail-title-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.ai-pm-mail-maxbtn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  line-height: 1;
+  font-size: 14px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.ai-pm-mail-maxbtn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+/* 最大化状态：铺满可用视口，内容区随之加高并滚动 */
+.modal.ai-pm-modal-wide.is-maximized {
+  width: 96vw;
+  max-width: 96vw;
+  height: 92vh;
+}
+.modal.ai-pm-modal-wide.is-maximized .modal-content {
+  max-height: calc(92vh - 70px);
+  height: 100%;
+  overflow-y: auto;
+}
+
 /* ===== 节点邮件弹窗（§4.6 · 原型 03） ===== */
 .ai-pm-mail-err-line {
   margin-top: 8px;
@@ -844,6 +891,20 @@ a.ai-pm-pick-name:hover {
 }
 .ai-pm-mail-body-preview li {
   margin: 2px 0;
+}
+/* 正文里粘贴/拖入的图片（Obsidian `![[引用]]` 渲染结果）：随正文宽度缩放，不溢出编辑框 */
+.ai-pm-mail-body-preview img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  margin: 6px 0;
+}
+/* 附件区提示（图片走正文内嵌、附件用于文件） */
+.ai-pm-mail-hint {
+  margin: 2px 0 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
 }
 .ai-pm-mail-body-preview table {
   border-collapse: collapse;

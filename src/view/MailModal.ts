@@ -9,8 +9,12 @@
  *   回写算法在 notes/mailRecord（纯字符串逻辑，可单测）
  *   结果页 = ① 邮件发送（顶部区域，含发送时间）+ ② 需求笔记变更预览（旧→新）；SVN 提交走右下角按钮手动触发（无结果区域），
  *   提交成功后自动关闭邮件窗口返回项目进展（进展弹窗同步刷新未提交变更）；环节推进静默（不显示区域）
- * - 附件：无固定附件模板，每次由用户单独添加/移除；只记录本地文件路径（不缓存内容进内存），
- *   发送时从磁盘读取随邮件一并发送（MIME 附件），发送记录仅留痕附件名；LLM 生成附件（docx/exceljs）属 P1
+ * - 附件：无固定附件模板，每次由用户单独添加/移除（支持一次多选）；只记录本地文件路径（不缓存内容进内存），
+ *   发送时从磁盘读取随邮件一并发送（MIME 附件），发送记录仅留痕附件名；关闭弹窗再打开会保留上次未发送的附件（会话级）；
+ * - 正文图片（0.3.0）：按 Obsidian 语义——图片直接粘贴/拖入正文 → 存进 vault 附件目录 + 插入 `![[路径]]` 引用；
+ *   发送时引用图片从 vault 读出、以 multipart/related + Content-ID 内嵌进邮件正文（不作附件），
+ *   外链/非图片/找不到文件的引用原样保留为文字并提示
+ * - 弹窗尺寸：标题栏右侧「⛶」按钮或双击标题栏可最大化/还原（长邮件正文编辑用）
  * - SMTP 发送：设置页配置 SMTP（服务器/端口/加密/账号/授权码/发件人）后，「📤 发送」真实发出邮件；
  *   未配置时跳过网络发送并如实提示，仍完成回写留痕；配置但发送失败时【不回写】——节点保持当前状态，
  *   可在结果页重试发送或返回预览修改（避免「邮件没发出去却标记为已发送」）
@@ -19,12 +23,13 @@
  */
 import { App, Component, MarkdownRenderer, Modal, Notice, TFile } from "obsidian";
 import type AIPMTool from "../main";
-import type { RequirementNote } from "../types";
+import type { RequirementNote, MailAttachmentItem, InlineMailImage } from "../types";
 import type { RuleStage } from "../rules";
 import { loadContactBook, formatRecipient, appendContactToBook, type ContactBook } from "../notes/contacts";
 import { buildMailRecord, upsertMailRecord } from "../notes/mailRecord";
 import { updateFrontmatter } from "./ProgressModal";
 import { sendMail, isValidEmailAddr, type MailAttachment } from "../mail/smtp";
+import { collectInlineImages } from "../mail/inlineImages";
 import { log } from "../utils/logger";
 import { autoMergeIfSafe, commitGuarded, createSvnClient } from "../utils/svnGuard";
 import { isConflictBlocked } from "../utils/svnConflictText";
@@ -46,12 +51,7 @@ interface Draft {
 }
 
 /** 附件条目（仅保留 File 句柄，不缓存内容；发送时经 File.arrayBuffer() 读取，读完即释放，不依赖 Node fs） */
-interface AttItem {
-  name: string;
-  mime: string; // 文件类型（input 提供，缺省 octet-stream）
-  size: number; // 文件大小（字节，仅展示用）
-  file: File; // 文件句柄（Electron 渲染进程 File API，发送时才读取内容）
-}
+type AttItem = MailAttachmentItem;
 
 /** 邮件模板（从仓库「邮件模板/<节点>邮件.md」解析出的 主题/正文 小节） */
 interface MailTemplate {
@@ -98,6 +98,8 @@ export class MailModal extends Modal {
   private node: RuleStage;
   private draft: Draft;
   private atts: AttItem[] = [];
+  private previewEl: HTMLElement | null = null; // 正文预览容器（粘贴/拖入图片时按光标插入引用）
+  private titleTextEl: HTMLElement | null = null; // 标题文字（单独 span：保留右侧最大化按钮）
   private hasGeneratedOnce = false; // 首次生成后保留用户附件（重新生成不清空）
   private isClosed = false; // 弹窗已关闭标记（in-flight 生成/发送完成后不再渲染）
   private mailTemplate: MailTemplate | null = null; // 对应节点的邮件正文模板（未找到为 null）
@@ -123,6 +125,8 @@ export class MailModal extends Modal {
     this.onDone = onDone;
     this.onCommitted = onCommitted;
     this.draft = { subject: "", body: "", recipients: [], cc: [] };
+    // 关闭弹窗再打开时恢复上次未发送的附件（会话级保留在插件实例上，避免"加了图却没带上"的静默丢失）
+    this.atts = [...(plugin.lastMailAttachments ?? [])];
   }
 
   /** 载入通讯录（设置项「通讯录名单路径」；留空不加载）；只加载一次 */
@@ -174,10 +178,14 @@ export class MailModal extends Modal {
 
   onOpen(): void {
     const { contentEl, titleEl } = this;
-    titleEl.setText(`${this.node.label} - ${STEP_DEFS[this.step - 1] ?? ""}`);
     contentEl.empty();
     contentEl.addClass("ai-pm-mail");
     this.modalEl.addClass("ai-pm-modal-wide"); // 弹窗加宽
+    this.setupTitleBar(titleEl);
+    this.updateTitle(`${this.node.label} - ${STEP_DEFS[this.step - 1] ?? ""}`);
+    if (this.atts.length > 0) {
+      new Notice(`已恢复上次未发送的 ${this.atts.length} 个附件（关闭弹窗不会丢失，发送成功后清空）`, 6000);
+    }
 
     // 环节 / 步骤信息已并入弹窗标题（环节 - 步骤），内容区直接从收件人开始
     // ===== 三块 tab 容器（生成 / 预览 / 发送回写结果） =====
@@ -191,6 +199,44 @@ export class MailModal extends Modal {
     void this.generate();
   }
 
+  /** 标题栏：左侧文字 + 右侧「最大化/还原」按钮（titleEl.setText 会清掉按钮，故文字单独放 span、后续只改文字） */
+  private setupTitleBar(titleEl: HTMLElement): void {
+    titleEl.empty();
+    titleEl.addClass("ai-pm-mail-title");
+    this.titleTextEl = titleEl.createSpan({ cls: "ai-pm-mail-title-text" });
+    const actions = titleEl.createDiv({ cls: "ai-pm-mail-title-actions" });
+    const btn = actions.createEl("button", {
+      cls: "ai-pm-mail-maxbtn",
+      attr: { title: "最大化 / 还原窗口（也可双击标题栏）", "aria-label": "最大化 / 还原窗口" },
+    });
+    btn.setText("⛶");
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.toggleMaximize(btn);
+    });
+    // 双击标题栏空白处同样切换（点在按钮上时不重复触发）
+    titleEl.addEventListener("dblclick", (e) => {
+      if ((e.target as HTMLElement)?.closest("button")) return;
+      this.toggleMaximize(btn);
+    });
+  }
+
+  /** 更新标题文字（保留右侧按钮；不叫 setTitle——与 Modal 基类同名方法签名冲突） */
+  private updateTitle(text: string): void {
+    if (this.titleTextEl) this.titleTextEl.setText(text);
+    else this.titleEl.setText(text);
+  }
+
+  /** 最大化 / 还原弹窗（长邮件正文编辑时用；状态落在 modalEl 的 is-maximized 类上） */
+  private toggleMaximize(btn?: HTMLButtonElement): void {
+    const on = !this.modalEl.hasClass("is-maximized");
+    this.modalEl.toggleClass("is-maximized", on);
+    if (btn) {
+      btn.setText(on ? "🗗" : "⛶");
+      btn.setAttr("title", on ? "还原窗口（也可双击标题栏）" : "最大化窗口（也可双击标题栏）");
+    }
+  }
+
   private tabGen!: HTMLElement;
   private tabPreview!: HTMLElement;
   private tabResult!: HTMLElement;
@@ -201,7 +247,7 @@ export class MailModal extends Modal {
     this.tabPreview.toggleClass("is-hidden", n !== 2);
     this.tabResult.toggleClass("is-hidden", n !== 3);
     // 弹窗标题：环节 - 步骤（如 <环节> - 预览确认）
-    this.titleEl.setText(`${this.node.label} - ${STEP_DEFS[n - 1] ?? ""}`);
+    this.updateTitle(`${this.node.label} - ${STEP_DEFS[n - 1] ?? ""}`);
   }
 
   // ===== ① 生成草稿（stay=true 为「↑ 重新生成」：留在当前预览页显示生成中，不跳转加载页） =====
@@ -453,6 +499,7 @@ export class MailModal extends Modal {
     const previewEl = bVal.createDiv({ cls: "ai-pm-mail-body-preview markdown-rendered" });
     previewEl.setAttribute("contenteditable", "true");
     previewEl.setAttribute("spellcheck", "false");
+    this.previewEl = previewEl;
     const renderPreview = (): void => {
       previewEl.empty();
       this.mdComp?.unload();
@@ -540,15 +587,39 @@ export class MailModal extends Modal {
       if (md !== this.draft.body) this.draft.body = md;
     };
     previewEl.addEventListener("input", serializePreview);
+    // 正文图片：按 Obsidian 语义——粘贴/拖入 → 存进 vault 附件目录 + 光标处插入 `![[路径]]` 引用；
+    // 发送时由 collectInlineImages 从 vault 读出、内嵌进邮件正文（不作附件）
+    previewEl.addEventListener("paste", (ev) => {
+      const e = ev as ClipboardEvent;
+      const files = Array.from(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith("image/"));
+      if (files.length === 0) return; // 纯文本粘贴走浏览器默认行为
+      e.preventDefault();
+      void this.attachImagesAsReferences(files, serializePreview, renderPreview);
+    });
+    previewEl.addEventListener("dragover", (ev) => {
+      const e = ev as DragEvent;
+      if (Array.from(e.dataTransfer?.items ?? []).some((i) => i.kind === "file")) e.preventDefault();
+    });
+    previewEl.addEventListener("drop", (ev) => {
+      const e = ev as DragEvent;
+      const files = Array.from(e.dataTransfer?.files ?? []).filter((f) => f.type.startsWith("image/"));
+      if (files.length === 0) return;
+      e.preventDefault();
+      void this.attachImagesAsReferences(files, serializePreview, renderPreview);
+    });
     renderPreview();
 
     // 附件（无固定模板，全部手动上传）
     const aField = mail.createDiv({ cls: "ai-pm-mail-field" });
     aField.createDiv({ cls: "ai-pm-mail-lb", text: "附件" });
     const aVal = aField.createDiv({ cls: "ai-pm-mail-val" });
+    aField.createDiv({
+      cls: "ai-pm-mail-hint",
+      text: "提示：图片可直接粘贴/拖入上方正文——图片会存进 vault 并以内嵌图随邮件正文发出，无需作为附件；附件用于 PDF/Office 等文件。",
+    });
     const attBox = aVal.createDiv({ cls: "ai-pm-mail-att" });
     if (this.atts.length === 0) {
-      attBox.createDiv({ text: "无附件，点击下方按钮添加（随邮件一并发送）", cls: "ai-pm-mail-muted" });
+      attBox.createDiv({ text: "无附件，点击下方按钮添加（随邮件一并发送，可一次多选）", cls: "ai-pm-mail-muted" });
     }
     for (const a of this.atts) {
       const row = attBox.createDiv({ cls: "ai-pm-mail-att-item" });
@@ -691,27 +762,107 @@ export class MailModal extends Modal {
     render();
   }
 
+  /** 选择附件（支持一次多选；单件与累计均按 25MB 上限校验） */
   private async uploadAttachment(): Promise<void> {
-    const input = this.contentEl.createEl("input", { attr: { type: "file" } });
+    const input = this.contentEl.createEl("input", { attr: { type: "file", multiple: "true" } });
     input.addClass("ai-pm-file-input-hidden"); // 隐藏 file input（仅用于触发选择器），完成后从 DOM 移除
     input.onchange = async () => {
-      const file = input.files?.[0];
+      const files = Array.from(input.files ?? []);
       input.remove();
-      if (!file) return;
-      if (file.size > MAX_ATTACH_TOTAL) {
-        new Notice(`附件超过 25MB 上限（${(file.size / 1048576).toFixed(1)}MB），请压缩后重试`, 5000);
-        return;
+      if (files.length === 0) return;
+      let total = this.atts.reduce((s, a) => s + a.size, 0);
+      let added = 0;
+      for (const file of files) {
+        if (file.size > MAX_ATTACH_TOTAL) {
+          new Notice(`附件超过 25MB 上限，已跳过：${file.name}`, 5000);
+          continue;
+        }
+        if (total + file.size > MAX_ATTACH_TOTAL) {
+          new Notice(`附件总量超过 25MB 上限，已跳过：${file.name}`, 5000);
+          continue;
+        }
+        this.atts.push({
+          name: file.name,
+          mime: file.type || "application/octet-stream",
+          size: file.size,
+          file, // 仅持句柄，内容在发送时读取（File.arrayBuffer），不缓存进内存
+        });
+        total += file.size;
+        added++;
       }
-      this.atts.push({
-        name: file.name,
-        mime: file.type || "application/octet-stream",
-        size: file.size,
-        file, // 仅持句柄，内容在发送时读取（File.arrayBuffer），不缓存进内存
-      });
       this.renderPreview();
-      new Notice(`已添加附件：${file.name}（${(file.size / 1024).toFixed(1)} KB）`, 4000);
+      if (added > 0) new Notice(`已添加 ${added} 个附件（共 ${this.atts.length} 个）`, 4000);
     };
     input.click();
+  }
+
+  /** 粘贴/拖入的图片：按 Obsidian 语义存进 vault 附件目录，并在正文光标处插入 `![[路径]]` 引用（发送时内嵌，不作附件） */
+  private async attachImagesAsReferences(files: File[], serialize: () => void, rerender: () => void): Promise<void> {
+    if (files.length === 0) return;
+    try {
+      const refs: string[] = [];
+      for (const file of files) {
+        const path = await this.attachmentPath(this.pastedImageName(file));
+        await this.app.vault.createBinary(path, await file.arrayBuffer());
+        refs.push(`![[${path}]]`);
+        log.debug(`正文图片已保存到 vault：${path}（${(file.size / 1024).toFixed(1)} KB）`);
+      }
+      this.insertAtCursor(refs.join("\n"));
+      serialize();
+      rerender();
+      new Notice(`已插入 ${refs.length} 张图片引用（发送时内嵌进邮件正文，不占附件）`, 6000);
+    } catch (e) {
+      log.warn(`正文图片插入失败：${(e as Error).message}`);
+      new Notice(`正文图片插入失败：${(e as Error).message}`, 8000);
+    }
+  }
+
+  /** 图片文件名（Obsidian 风格「Pasted image 时间戳.扩展名」；落盘路径由 attachmentPath 去重） */
+  private pastedImageName(file: File): string {
+    const sub = (file.type.split("/")[1] ?? "png").toLowerCase();
+    const ext = sub === "jpeg" ? "jpg" : sub === "svg+xml" ? "svg" : sub;
+    const d = new Date();
+    const p = (n: number): string => String(n).padStart(2, "0");
+    return `Pasted image ${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.${ext}`;
+  }
+
+  /** 图片落盘路径：优先用 Obsidian 附件目录设置（app.fileManager.getAvailablePathForAttachment）；不可用时回退 vault 根并去重 */
+  private async attachmentPath(name: string): Promise<string> {
+    try {
+      return await this.app.fileManager.getAvailablePathForAttachment(name, this.note.path);
+    } catch (e) {
+      log.warn(`附件目录解析失败，回退 vault 根：${(e as Error).message}`);
+      const dot = name.lastIndexOf(".");
+      const stem = dot > 0 ? name.slice(0, dot) : name;
+      const ext = dot > 0 ? name.slice(dot) : "";
+      let path = name;
+      let i = 1;
+      while (this.app.vault.getAbstractFileByPath(path)) path = `${stem} ${i++}${ext}`;
+      return path;
+    }
+  }
+
+  /** 在正文预览光标处插入文本（光标不在正文内时追加到末尾另起一段） */
+  private insertAtCursor(text: string): void {
+    const el = this.previewEl;
+    if (!el) return;
+    const sel = window.getSelection();
+    let range: Range | null = null;
+    if (sel && sel.rangeCount > 0) {
+      const r = sel.getRangeAt(0);
+      if (el.contains(r.commonAncestorContainer)) range = r;
+    }
+    if (!range) {
+      el.createEl("p").setText(text);
+      return;
+    }
+    range.deleteContents();
+    const node = document.createTextNode(text);
+    range.insertNode(node);
+    range.setStartAfter(node);
+    range.collapse(true);
+    sel?.removeAllRanges();
+    sel?.addRange(range);
   }
 
   /** 发送时读取全部附件内容（仅本次发送占用内存，发送完即释放；经 File API 读取，不依赖 Node fs） */
@@ -806,6 +957,9 @@ export class MailModal extends Modal {
 
         // 环节推进（回写成功即标记完成，不显示区域）——弹窗已关闭时也调用，保证总览/进展状态一致
         this.onDone?.();
+        // 发送成功且已回写：清空会话级附件缓存，避免下一封信误带上一封的附件
+        this.plugin.lastMailAttachments = [];
+        this.atts = [];
 
         if (this.isClosed) {
           this.sending = false;
@@ -891,6 +1045,22 @@ export class MailModal extends Modal {
       render("⚠️", "附件读取失败", (e as Error).message, true);
       return "failed";
     }
+    // 正文图片引用 → 内嵌图：从 vault 读取二进制并以 multipart/related 内嵌（外链/非图片/缺失文件保留原文并提示）
+    let inline: { body: string; images: InlineMailImage[]; skipped: string[] } = {
+      body: this.draft.body,
+      images: [],
+      skipped: [],
+    };
+    try {
+      inline = await collectInlineImages(this.app, this.draft.body, this.note.path);
+      if (inline.skipped.length > 0) {
+        log.warn(`正文有 ${inline.skipped.length} 处图片引用未内嵌：${inline.skipped.join("；").slice(0, 300)}`);
+        new Notice(`⚠️ 有 ${inline.skipped.length} 处图片引用未能内嵌（外链/非图片/文件不存在），将按文字保留在正文中`, 8000);
+      }
+      if (inline.images.length > 0) log.debug(`正文内嵌图 ${inline.images.length} 张（已从 vault 读取）`);
+    } catch (e) {
+      log.warn(`正文图片解析失败，按原文发送：${(e as Error).message}`);
+    }
     try {
       const res = await sendMail(
         {
@@ -907,8 +1077,9 @@ export class MailModal extends Modal {
           to: this.draft.recipients,
           cc: this.draft.cc,
           subject: this.draft.subject,
-          body: this.draft.body,
+          body: inline.body,
           attachments,
+          inlineImages: inline.images,
         }
       );
       if (res.ok) {
@@ -976,6 +1147,8 @@ export class MailModal extends Modal {
   }
 
   onClose(): void {
+    // 关闭弹窗时保留本次已选附件（会话级，存插件实例）：重开弹窗恢复，避免"加了附件却没带上"的静默丢失
+    this.plugin.lastMailAttachments = [...this.atts];
     this.isClosed = true;
     this.mdComp?.unload();
     this.mdComp = null;

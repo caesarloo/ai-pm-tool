@@ -5,7 +5,7 @@
  * - 运行环境：装有 svn 命令的主机（SVN 工作副本仓库，isDesktopOnly）
  */
 import { Notice, Plugin, WorkspaceLeaf } from "obsidian";
-import { DEFAULT_SETTINGS, type AIPMSettings, type LLMProvider } from "./types";
+import { DEFAULT_SETTINGS, type AIPMSettings, type LLMProvider, type MailAttachmentItem } from "./types";
 import { LLMGateway } from "./llm/gateway";
 import { STATUS_VIEW_TYPE, StatusView } from "./view/StatusView";
 import { AIPMSettingTab } from "./settings";
@@ -20,6 +20,8 @@ export default class AIPMTool extends Plugin {
   gateway: LLMGateway | null = null;
   /** 项目进展规则（01-AI-PM-TOOL规则文件.md 解析结果；null = 未加载，视图访问时回退内置默认） */
   rules: ProjectRules | null = null;
+  /** 上一次邮件弹窗里已选、尚未发送的附件（会话级；关闭弹窗重开时恢复，发送成功后清空） */
+  lastMailAttachments: MailAttachmentItem[] = [];
 
   async onload(): Promise<void> {
     await this.loadSettings();

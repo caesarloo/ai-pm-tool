@@ -80,6 +80,23 @@ export interface LLMProvider {
   maxOutputTokens?: number;
 }
 
+/** 邮件附件条目（仅保留 File 句柄，发送时才读取内容；挂在插件实例上可跨弹窗保留） */
+export interface MailAttachmentItem {
+  name: string;
+  mime: string; // 文件类型（input 提供，缺省 octet-stream）
+  size: number; // 文件大小（字节，仅展示用）
+  file: File; // 文件句柄（Electron 渲染进程 File API，发送时才读取内容）
+}
+
+/** 邮件正文内嵌图片（正文里的 Obsidian 图片引用在发送时从 vault 读出、以 multipart/related 内嵌，不作附件） */
+export interface InlineMailImage {
+  token: string; // 正文占位符（如 @@AI_PM_IMG_0@@）：发送时替换成 HTML <img src="cid:"> / 纯文本图片说明
+  cid: string; // MIME Content-ID（不含尖括号）
+  filename: string; // 文件名（Content-ID 展示与纯文本占位用）
+  mime: string; // 如 image/png
+  data: ArrayBuffer; // 图片二进制内容
+}
+
 /** 插件设置（§5 / §6 附件模板目录） */
 export interface AIPMSettings {
   llmProviders: LLMProvider[];

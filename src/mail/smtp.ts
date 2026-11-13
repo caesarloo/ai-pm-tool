@@ -4,11 +4,16 @@
  * - 支持三种加密：none(25 明文) / starttls(587 升级) / tls(465 直连 SSL)
  * - 中文主题/发件人名称按 RFC2047 =?UTF-8?B?...?= 编码；正文 UTF-8 8bit + 点填充
  * - 单次会话：EHLO → (STARTTLS+EHLO) → AUTH LOGIN → MAIL FROM → RCPT TO×N → DATA → QUIT
+ * - 邮件结构（0.3.0 起支持正文内嵌图）：
+ *   无图无附件 = multipart/alternative；
+ *   仅内嵌图 = multipart/related（内层 alternative + 图片 Content-ID 部件）；
+ *   有附件 = 外层 multipart/mixed（内层按上面规则）
  */
 import { connect as netConnect, type Socket } from "node:net";
 import { connect as tlsConnect } from "node:tls";
 import { log } from "../utils/logger";
 import { maskAccount } from "../utils/secure";
+import type { InlineMailImage } from "../types";
 
 export interface SmtpConfig {
   host: string;
@@ -35,6 +40,8 @@ export interface MailMessage {
   subject: string;
   body: string;
   attachments?: MailAttachment[];
+  /** 正文内嵌图（正文里的 Obsidian 图片引用解析结果；组装 multipart/related，不作附件） */
+  inlineImages?: InlineMailImage[];
 }
 
 export interface SmtpResult {
@@ -302,78 +309,145 @@ function mdToPlain(md: string): string {
     .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, "$1（$2）");
 }
 
+/** 内嵌图占位 token → HTML `<img src="cid:...">`（内容已在 mdToHtml 中做过转义，token 是纯文本不会被改写） */
+function replaceInlineTokens(html: string, images: InlineMailImage[]): string {
+  let out = html;
+  for (const img of images) {
+    const tag = `<img src="cid:${img.cid}" alt="${escapeHtml(img.filename)}" style="max-width:100%;height:auto;display:block;margin:8px 0" />`;
+    out = out.split(img.token).join(tag);
+  }
+  return out;
+}
+
+/** 内嵌图占位 token → 纯文本说明（纯文本客户端与回写留痕用） */
+function replaceInlineTokensPlain(text: string, images: InlineMailImage[]): string {
+  let out = text;
+  for (const img of images) out = out.split(img.token).join(`[图片：${img.filename}]`);
+  return out;
+}
+
+/** 正文部件（multipart/alternative：纯文本 + HTML） */
+function alternativeParts(boundary: string, plain: string, html: string): string[] {
+  return [
+    `--${boundary}`,
+    'Content-Type: text/plain; charset="UTF-8"',
+    "Content-Transfer-Encoding: 8bit",
+    "",
+    plain,
+    `--${boundary}`,
+    'Content-Type: text/html; charset="UTF-8"',
+    "Content-Transfer-Encoding: 8bit",
+    "",
+    html,
+    `--${boundary}--`,
+    "",
+  ];
+}
+
+/** 内嵌图片部件（Content-ID 引用 + inline disposition + base64） */
+function inlineImageParts(boundary: string, images: InlineMailImage[]): string[] {
+  const parts: string[] = [];
+  for (const img of images) {
+    parts.push(`--${boundary}`);
+    parts.push(`Content-Type: ${img.mime}; name="${quotedFilename(img.filename)}"`);
+    parts.push("Content-Transfer-Encoding: base64");
+    parts.push(`Content-ID: <${img.cid}>`);
+    parts.push(`Content-Disposition: inline; ${dispositionFilename(img.filename)}`);
+    parts.push("");
+    parts.push(b64Binary(img.data));
+  }
+  return parts;
+}
+
 /**
- * 组装 MIME 报文
- * - multipart/mixed：正文 multipart/alternative（纯文本 + HTML，Markdown 自动转标准格式）+ 附件（Base64）
+ * 组装 MIME 报文（导出供冒烟测试断言结构）
+ * - 无内嵌图无附件：multipart/alternative
+ * - 仅内嵌图：multipart/related（内层 alternative + 图片 Content-ID 部件，正文 `<img src="cid:...">`）
+ * - 有附件：外层 multipart/mixed（内层按上面规则），附件走 Content-Disposition: attachment
  * - 点填充（行首 "." 加倍）在 sendMail 中对整个报文执行；结束 "." 分隔符在 sendData 中追加
  */
-function buildMessage(cfg: SmtpConfig, msg: MailMessage): string {
+export function buildMessage(cfg: SmtpConfig, msg: MailMessage): string {
   const date = new Date().toUTCString();
   const fromAddr = cfg.from.trim();
   const fromName = cfg.fromName.trim();
-  const boundary = `=_ai-pm-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  const atts = msg.attachments ?? [];
+  const inline = msg.inlineImages ?? [];
+  const makeBoundary = (tag: string): string =>
+    `=_ai-pm-${tag}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  const topBoundary = makeBoundary("top");
+  const altBoundary = makeBoundary("alt");
+  const relBoundary = makeBoundary("rel");
+  // Message-ID：让邮件可被 `Re:` 串成会话（缺它时对方回复无法线程化）
+  const domain = fromAddr.includes("@") ? fromAddr.split("@").pop() || "ai-pm-tool.local" : "ai-pm-tool.local";
+  const messageId = `<${Date.now().toString(36)}.${Math.random().toString(36).slice(2, 10)}@${domain}>`;
+
+  const hasAtt = atts.length > 0;
+  const hasInline = inline.length > 0;
+  const topType = hasAtt
+    ? `multipart/mixed; boundary="${topBoundary}"`
+    : hasInline
+      ? `multipart/related; boundary="${topBoundary}"; type="multipart/alternative"`
+      : `multipart/alternative; boundary="${topBoundary}"`;
+
   const head: string[] = [];
   head.push(`From: ${fromName ? `${encodeHeader(fromName)} <${fromAddr}>` : fromAddr}`);
   if (msg.to.length > 0) head.push(`To: ${msg.to.join(", ")}`);
   if (msg.cc.length > 0) head.push(`Cc: ${msg.cc.join(", ")}`);
   head.push(`Subject: ${encodeHeader(msg.subject)}`);
   head.push(`Date: ${date}`);
+  head.push(`Message-ID: ${messageId}`);
   head.push("MIME-Version: 1.0");
-  head.push(
-    msg.attachments && msg.attachments.length > 0
-      ? `Content-Type: multipart/mixed; boundary="${boundary}"`
-      : `Content-Type: multipart/alternative; boundary="${boundary}"`
-  );
+  head.push(`Content-Type: ${topType}`);
   head.push("");
 
-  const html = `<html><body style="font-family:-apple-system,'Segoe UI','Microsoft YaHei',sans-serif;font-size:14px;line-height:1.7;color:#222">${mdToHtml(
-    msg.body
+  const htmlBody = `<html><body style="font-family:-apple-system,'Segoe UI','Microsoft YaHei',sans-serif;font-size:14px;line-height:1.7;color:#222">${replaceInlineTokens(
+    mdToHtml(msg.body),
+    inline
   )}</body></html>`;
-  const altBoundary = `=_ai-pm-alt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-  const altParts: string[] = [
-    `--${altBoundary}`,
-    'Content-Type: text/plain; charset="UTF-8"',
-    "Content-Transfer-Encoding: 8bit",
-    "",
-    mdToPlain(msg.body),
-    `--${altBoundary}`,
-    'Content-Type: text/html; charset="UTF-8"',
-    "Content-Transfer-Encoding: 8bit",
-    "",
-    html,
-    `--${altBoundary}--`,
-    "",
-  ];
+  const plainBody = replaceInlineTokensPlain(mdToPlain(msg.body), inline);
+  // 嵌套时内层 alternative 用独立边界；平坦（无外层）时直接用顶层边界
+  const altParts = alternativeParts(hasAtt || hasInline ? altBoundary : topBoundary, plainBody, htmlBody);
 
   const parts: string[] = [];
-  if (msg.attachments && msg.attachments.length > 0) {
-    parts.push(`--${boundary}`);
-    parts.push(`Content-Type: multipart/alternative; boundary="${altBoundary}"`);
-    parts.push("");
-    parts.push(...altParts);
-    for (const a of msg.attachments) {
-      parts.push(`--${boundary}`);
+  if (hasAtt) {
+    parts.push(`--${topBoundary}`);
+    if (hasInline) {
+      // 正文（alternative + 内嵌图）作为 multipart/related 子部件，再与附件一起放进 multipart/mixed
+      parts.push(`Content-Type: multipart/related; boundary="${relBoundary}"; type="multipart/alternative"`);
+      parts.push("");
+      parts.push(`--${relBoundary}`);
+      parts.push(`Content-Type: multipart/alternative; boundary="${altBoundary}"`);
+      parts.push("");
+      parts.push(...altParts);
+      parts.push(...inlineImageParts(relBoundary, inline));
+      parts.push(`--${relBoundary}--`);
+      parts.push("");
+    } else {
+      parts.push(`Content-Type: multipart/alternative; boundary="${altBoundary}"`);
+      parts.push("");
+      parts.push(...altParts);
+    }
+    for (const a of atts) {
+      parts.push(`--${topBoundary}`);
       parts.push(`Content-Type: ${mimeFor(a)}; name="${quotedFilename(a.filename)}"`);
       parts.push("Content-Transfer-Encoding: base64");
       parts.push(`Content-Disposition: attachment; ${dispositionFilename(a.filename)}`);
       parts.push("");
       parts.push(b64Binary(a.data));
     }
-    parts.push(`--${boundary}--`);
+    parts.push(`--${topBoundary}--`);
+    parts.push("");
+  } else if (hasInline) {
+    // 顶层 multipart/related：正文 alternative + 内嵌图片
+    parts.push(`--${topBoundary}`);
+    parts.push(`Content-Type: multipart/alternative; boundary="${altBoundary}"`);
+    parts.push("");
+    parts.push(...altParts);
+    parts.push(...inlineImageParts(topBoundary, inline));
+    parts.push(`--${topBoundary}--`);
     parts.push("");
   } else {
-    parts.push(`--${boundary}`);
-    parts.push('Content-Type: text/plain; charset="UTF-8"');
-    parts.push("Content-Transfer-Encoding: 8bit");
-    parts.push("");
-    parts.push(mdToPlain(msg.body));
-    parts.push(`--${boundary}`);
-    parts.push('Content-Type: text/html; charset="UTF-8"');
-    parts.push("Content-Transfer-Encoding: 8bit");
-    parts.push("");
-    parts.push(html);
-    parts.push(`--${boundary}--`);
-    parts.push("");
+    parts.push(...altParts);
   }
   return head.join(CRLF) + CRLF + parts.join(CRLF);
 }
@@ -651,8 +725,12 @@ export async function sendMail(cfg: SmtpConfig, msg: MailMessage): Promise<SmtpR
 
     await s.cmd("QUIT").catch(() => undefined);
     const attN = atts.length;
-    log.debug(`SMTP 发送成功：${host}:${port}${attN > 0 ? `，附件 ${attN} 个` : ""}`);
-    return { ok: true, message: `已发送（${host}:${port}，收件人 ${tos.length} 人${attN > 0 ? `，附件 ${attN} 个` : ""}）` };
+    const inlineN = (msg.inlineImages ?? []).length;
+    log.debug(`SMTP 发送成功：${host}:${port}${attN > 0 ? `，附件 ${attN} 个` : ""}${inlineN > 0 ? `，内嵌图 ${inlineN} 张` : ""}`);
+    return {
+      ok: true,
+      message: `已发送（${host}:${port}，收件人 ${tos.length} 人${attN > 0 ? `，附件 ${attN} 个` : ""}${inlineN > 0 ? `，正文内嵌图 ${inlineN} 张` : ""}）`,
+    };
   } catch (e) {
     const raw = (e as Error).message;
     // 会话级错误（999：命令超时/连接关闭）本身已说明原因，不再叠加网络排查提示
