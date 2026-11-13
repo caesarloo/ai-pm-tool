@@ -207,7 +207,7 @@ export class MailModal extends Modal {
     const actions = titleEl.createDiv({ cls: "ai-pm-mail-title-actions" });
     const btn = actions.createEl("button", {
       cls: "ai-pm-mail-maxbtn",
-      attr: { title: "最大化 / 还原窗口（也可双击标题栏）", "aria-label": "最大化 / 还原窗口" },
+      attr: { title: "全屏 / 还原窗口（也可双击标题栏）", "aria-label": "全屏 / 还原窗口" },
     });
     btn.setText("⛶");
     btn.addEventListener("click", (e) => {
@@ -233,7 +233,7 @@ export class MailModal extends Modal {
     this.modalEl.toggleClass("is-maximized", on);
     if (btn) {
       btn.setText(on ? "🗗" : "⛶");
-      btn.setAttr("title", on ? "还原窗口（也可双击标题栏）" : "最大化窗口（也可双击标题栏）");
+      btn.setAttr("title", on ? "还原窗口（也可双击标题栏）" : "全屏窗口（也可双击标题栏）");
     }
   }
 
@@ -493,7 +493,8 @@ export class MailModal extends Modal {
     });
 
     // 正文：所见即所得预览编辑（渲染效果上直接修改，自动转回 Markdown，无切换按钮）
-    const bField = mail.createDiv({ cls: "ai-pm-mail-field" });
+    // ai-pm-mail-body-field：全屏（is-maximized）时该字段撑满剩余高度、编辑器内部滚动（0.3.4）
+    const bField = mail.createDiv({ cls: "ai-pm-mail-field ai-pm-mail-body-field" });
     bField.createDiv({ cls: "ai-pm-mail-lb", text: "正文" });
     const bVal = bField.createDiv({ cls: "ai-pm-mail-val ai-pm-mail-body" });
     const previewEl = bVal.createDiv({ cls: "ai-pm-mail-body-preview markdown-rendered" });

@@ -714,15 +714,59 @@ a.ai-pm-pick-name:hover {
   background: var(--background-modifier-hover);
   color: var(--text-normal);
 }
-/* 最大化状态：铺满可用视口，内容区随之加高并滚动 */
+/* 最大化状态（0.3.4）：真·全屏 + 正文区自适应高度——邮件正文一次能看到更多行 */
 .modal.ai-pm-modal-wide.is-maximized {
-  width: 96vw;
-  max-width: 96vw;
-  height: 92vh;
+  width: 100vw;
+  max-width: 100vw;
+  height: 100vh;
+  max-height: 100vh;
+  padding: 0;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+}
+.modal.ai-pm-modal-wide.is-maximized .modal-header {
+  flex: 0 0 auto;
+  margin-bottom: 0;
 }
 .modal.ai-pm-modal-wide.is-maximized .modal-content {
-  max-height: calc(92vh - 70px);
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  max-height: none;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+/* 页签纵向分配：正文占满剩余高度，重新生成区与底部按钮固定 */
+.modal.ai-pm-modal-wide.is-maximized .ai-pm-mail-tab:not(.is-hidden) {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.modal.ai-pm-modal-wide.is-maximized .ai-pm-mail-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* 正文字段（含编辑器）撑满剩余空间；编辑器自身滚动，不再受 300px 上限约束 */
+.modal.ai-pm-modal-wide.is-maximized .ai-pm-mail-body-field {
+  flex: 1 1 auto;
+  min-height: 0;
+  align-items: stretch;
+}
+.modal.ai-pm-modal-wide.is-maximized .ai-pm-mail-body-field > .ai-pm-mail-val {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.modal.ai-pm-modal-wide.is-maximized .ai-pm-mail-body-field .ai-pm-mail-body-preview {
+  max-height: none;
+  min-height: 120px;
+  flex: 1 1 auto;
   overflow-y: auto;
 }
 
