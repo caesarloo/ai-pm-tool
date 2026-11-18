@@ -17,7 +17,7 @@
  * - 弹窗尺寸：标题栏右侧「⛶」按钮或双击标题栏可最大化/还原（长邮件正文编辑用）
  * - SMTP 发送：设置页配置 SMTP（服务器/端口/加密/账号/授权码/发件人）后，「📤 发送」真实发出邮件；
  *   未配置时跳过网络发送并如实提示，仍完成回写留痕；配置但发送失败时【不回写】——节点保持当前状态，
- *   可在结果页重试发送或返回预览修改（避免「邮件没发出去却标记为已发送」）
+ *   可在结果页重试发送、返回预览修改，或就地打开设置修改邮箱配置（弹窗不关，已编辑内容不丢；2026-11-17 密码错误场景）
  * - 收件人来源：干系人从 frontmatter 提取后经通讯录解析为邮箱（姓名 → 邮箱）；通讯录「公共邮箱」小节为部门邮件组，
  *   默认放入抄送（可在预览页增删）；不再在设置中配置部门邮件组
  */
@@ -903,6 +903,19 @@ export class MailModal extends Modal {
   // ===== ③ 发送回写（结果页：① 邮件发送并入顶部区域 + ② 变更预览；SVN 提交走右下角按钮，无结果块） =====
   private mdComp: Component | null = null; // 正文预览渲染组件（关闭时释放）
 
+  /** 打开本插件设置页（邮件发送 SMTP）：发送失败时就地改配置，不关闭本弹窗、不丢已编辑内容 */
+  private openMailSettings(): void {
+    const setting = (this.app as unknown as {
+      setting?: { open(): void; openTabById?(id: string): void };
+    }).setting;
+    if (!setting) {
+      new Notice("请手动打开：设置 → AI PM Tool → 邮件发送（SMTP）", 6000);
+      return;
+    }
+    setting.open();
+    setting.openTabById?.("ai-pm-tool");
+  }
+
   private async send(): Promise<void> {
     if (this.sending) return;
     // 收件人/抄送校验：未匹配到邮箱或地址非法时，提示并引导补充（不发送、不回写）
@@ -937,6 +950,9 @@ export class MailModal extends Modal {
           this.showTab(2);
           this.sending = false;
         });
+        // 邮箱密码/授权码错误等发送失败：就地打开设置改配置（弹窗不关、已编辑内容不丢）；改完回来点「重新发送」即用新配置
+        const cfg = foot.createEl("button", { cls: "ai-pm-mail-btn ghost left", text: "⚙️ 修改邮箱配置" });
+        cfg.addEventListener("click", () => this.openMailSettings());
         const retry = foot.createEl("button", { cls: "ai-pm-mail-btn primary", text: "↻ 重新发送" });
         retry.addEventListener("click", () => void this.send());
         this.sending = false;
@@ -1105,12 +1121,12 @@ export class MailModal extends Modal {
         return "ok";
       } else {
         log.warn(`邮件发送失败：${res.message}`);
-        render("⚠️", "邮件发送失败", `${res.message}。未回写需求笔记，可重试或返回修改`, true);
+        render("⚠️", "邮件发送失败", `${res.message}。未回写需求笔记，可重试、返回修改或修改邮箱配置`, true);
         return "failed";
       }
     } catch (e) {
       log.error("邮件发送异常", e);
-      render("⚠️", "邮件发送异常", `${(e as Error).message}。未回写需求笔记，可重试或返回修改`, true);
+      render("⚠️", "邮件发送异常", `${(e as Error).message}。未回写需求笔记，可重试、返回修改或修改邮箱配置`, true);
       return "failed";
     }
   }
