@@ -72,7 +72,7 @@ Fields are written back **key-by-key against the baseline at open time** — unt
 
 #### Milestone emails
 
-From a milestone node: ① **LLM draft** (falls back to a template when no model is configured) → ② **preview & edit** (recipients from your contact book + stakeholders, subject/body editable, attachments multi-selectable) → ③ **send & record** (flags the milestone, archives the sent email record in the note as an Obsidian quote callout (`> [!quote]`): send time and attachment names stay outside the callout, while recipients, CC, subject and body sit inside it, then commit to SVN). **Body images**: paste or drop images straight into the body — they are saved into your Obsidian attachment folder and inserted as `![[...]]` references, then **embedded into the mail body itself** (multipart/related + Content-ID, not sent as attachments) when you send; use attachments for PDF/Office files. The dialog can be maximized for long bodies (⛶ in the title bar or double-click the title). Configure SMTP in Settings to actually send; without SMTP the flow only records the draft as sent-acknowledged.
+From any unfinished milestone node (no need to go in order — skipping a node never blocks you): ① **LLM draft** (falls back to a template when no model is configured) → ② **preview & edit** (recipients from your contact book + stakeholders, subject/body editable, attachments multi-selectable) → ③ **send & record** (flags the milestone, archives the sent email record in the note as an Obsidian quote callout (`> [!quote]`): send time and attachment names stay outside the callout, while recipients, CC, subject and body sit inside it, then commit to SVN). **Body images**: paste or drop images straight into the body — they are saved into your Obsidian attachment folder and inserted as `![[...]]` references, then **embedded into the mail body itself** (multipart/related + Content-ID, not sent as attachments) when you send; use attachments for PDF/Office files. The dialog can be maximized for long bodies (⛶ in the title bar or double-click the title). Configure SMTP in Settings to actually send; without SMTP the flow only records the draft as sent-acknowledged.
 
 #### Add requirement (✨)
 
@@ -152,14 +152,14 @@ SVN 是独立版本控制系统，Obsidian 的 API 无法驱动它。同步 / �
 
 总览中点击任一需求卡片打开**需求工作台**——**默认展示项目进展**：
 
-- **项目进展**（默认）：环节时间轴 → 填写进展说明/项目状态/计划上线日期 → 预览变更（旧→新）→ 点击「⬆️ 提交SVN」（写 frontmatter + `svn commit`）；时间轴当前环节可「✉️ 发起邮件」
+- **项目进展**（默认）：环节时间轴 → 填写进展说明/项目状态/计划上线日期 → 预览变更（旧→新）→ 点击「⬆️ 提交SVN」（写 frontmatter + `svn commit`）；时间轴任一未完成节点都可「✉️ 发起邮件」（不强制按顺序，跳过某节点不会被卡住）
 - **视图切换**：标题行**最右侧单个切换按钮**（方向箭头 + 动作文案，已为右上角关闭 ✕ 让位）——进展视图下显示「➤ 进入编辑」，点击进入全字段编辑（含需求名称 = 文件名 + SKILL 审核 + 「⬆️ 提交 SVN」）；编辑中按钮文案变为「← 返回进展」，点击返回。任何需求文件（已提交/未提交）都可打开编辑与再提交
 
 写入按「打开时基线」**键级写回**：未改动的键保持磁盘原样，进展表单/邮件流程回写的字段不会被覆盖。编辑视图有未提交修改时关闭弹窗仍会保留文件（内容落盘、不删除）。
 
 #### 节点邮件
 
-从进展页节点进入：① **LLM 生成草稿**（未配置模型时降级用模板草稿）→ ② **预览确认**（收件人来自通讯录+干系人，主题/正文可编辑、附件可一次多选）→ ③ **发送回写**（标记环节、正文发送记录存档（发送记录以 Obsidian quote callout `> [!quote]` 存档：发送时间与附件名留在 callout 外，收件人/抄送/主题/正文在 callout 内）、提交 SVN）。**正文图片**：图片可直接粘贴/拖入正文——按 Obsidian 语义存进 vault 附件目录并插入 `![[引用]]`，发送时**内嵌进邮件正文**（multipart/related + Content-ID，不作附件）；附件用于 PDF/Office 等文件。长邮件编辑可点标题栏「⛶」或双击标题栏最大化窗口。设置中配置 SMTP 后真实发信；未配置则仅回写留痕。
+从进展页**任一未完成节点**进入（不必按顺序，跳过某节点不会卡住）：① **LLM 生成草稿**（未配置模型时降级用模板草稿）→ ② **预览确认**（收件人来自通讯录+干系人，主题/正文可编辑、附件可一次多选）→ ③ **发送回写**（标记环节、正文发送记录存档（发送记录以 Obsidian quote callout `> [!quote]` 存档：发送时间与附件名留在 callout 外，收件人/抄送/主题/正文在 callout 内）、提交 SVN）。**正文图片**：图片可直接粘贴/拖入正文——按 Obsidian 语义存进 vault 附件目录并插入 `![[引用]]`，发送时**内嵌进邮件正文**（multipart/related + Content-ID，不作附件）；附件用于 PDF/Office 等文件。长邮件编辑可点标题栏「⛶」或双击标题栏最大化窗口。设置中配置 SMTP 后真实发信；未配置则仅回写留痕。
 
 #### 新增需求（✨）
 

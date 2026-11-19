@@ -3,7 +3,7 @@
  * - 历史：进展更新弹窗（ProgressModal），P1 迭代后迁入「需求工作台」弹窗的「项目进展」页签
  *   因此本文件保留为纯面板组件（ProgressPanel）+ 被 MailModal / 冒烟测试引用的 updateFrontmatter
  * - ProgressPanel：从状态总览卡片/需求工作台进入，需求由上下文带入
- *   - 项目环节时间轴（规则文件驱动：✅ 已完成 / ▶ 当前 / ○ 待进行）；当前节点可「✉️ 发起邮件」进入邮件引擎（§4.6）
+ *   - 项目环节时间轴（规则文件驱动：✅ 已完成 / ▶ 当前 / ○ 待进行）；未完成节点均可「✉️ 发起邮件」进入邮件引擎（§4.6，不强制按顺序）
  *   - 表单（规则文件「可编辑」字段：控件/枚举/写入风格动态生成）→ 变更预览（旧→新）→「⬆️ 提交SVN」
  *   - 纯人工录入，无 LLM 建议；写入 frontmatter 并 svn commit（§4.5）
  */
@@ -205,7 +205,7 @@ export class ProgressPanel {
     const stagesBox = contentEl.createDiv({ cls: "ai-pm-stages" });
     stagesBox.createDiv({ cls: "ai-pm-stages-t", text: `项目环节（${stages.length} 节点生命周期）` });
     const tl = stagesBox.createDiv({ cls: "ai-pm-tl" });
-    // 当前环节 = 第一个未完成节点
+    // 当前环节 = 第一个未完成节点（仅用于 ▶ 标记；未完成节点都允许发起邮件，不强制按顺序）
     let current = 0;
     for (const [i, m] of stages.entries()) {
       if (!this.note.mailFlags[m.key]) {
@@ -214,24 +214,25 @@ export class ProgressPanel {
       }
     }
     stages.forEach((m, i) => {
-      const st = tl.createDiv({
-        cls: `ai-pm-st${this.note.mailFlags[m.key] ? " done" : i === current ? " current" : ""}`,
-      });
+      const done = Boolean(this.note.mailFlags[m.key]);
+      const st = tl.createDiv({ cls: `ai-pm-st${done ? " done" : i === current ? " current" : ""}` });
       st.createSpan({ cls: "ai-pm-st-nm", text: `${i + 1} ${m.label}` });
       if (m.optional) st.createSpan({ cls: "ai-pm-st-opt", text: "可选" });
-      if (this.note.mailFlags[m.key]) {
+      if (done) {
         st.createSpan({ cls: "ai-pm-st-date", text: "✅" }); // 时间由 fillStageDates 异步补充
-      } else if (i === current) {
-        st.createSpan({ cls: "ai-pm-st-date", text: "▶ 当前" });
-        const btn = st.createEl("button", { cls: "ai-pm-st-btn", text: "✉️ 发起邮件" });
-        btn.addEventListener("click", () => {
-          this.mailNodeLabel = m.label;
-          // onDone：邮件回写后刷新本面板；onCommitted：邮件页 SVN 提交成功后重新加载未提交变更（提交后自动关闭返回本面板）
-          new MailModal(this.app, this.plugin, this.note, i, () => void this.refreshAfterMail(), () => this.refreshSvnDiff()).open();
-        });
-      } else {
-        st.createSpan({ cls: "ai-pm-st-date", text: "○" });
+        return;
       }
+      st.createSpan({ cls: "ai-pm-st-date", text: i === current ? "▶ 当前" : "○" });
+      // 未完成节点均可发起邮件：跳过某个节点不会被卡住（可补发或提前发），回写只标记该节点自身
+      const btn = st.createEl("button", {
+        cls: `ai-pm-st-btn${i === current ? "" : " ghost"}`,
+        text: "✉️ 发起邮件",
+      });
+      btn.addEventListener("click", () => {
+        this.mailNodeLabel = m.label;
+        // onDone：邮件回写后刷新本面板；onCommitted：邮件页 SVN 提交成功后重新加载未提交变更（提交后自动关闭返回本面板）
+        new MailModal(this.app, this.plugin, this.note, i, () => void this.refreshAfterMail(), () => this.refreshSvnDiff()).open();
+      });
     });
     // 异步补充正文「邮件发送时间」
     void this.fillStageDates(tl, stages);
@@ -484,7 +485,8 @@ export class ProgressPanel {
   /** 邮件发送回写后刷新本面板（节点标志、时间轴、当前环节变化；SVN 变更预览重新加载） */
   private async refreshAfterMail(): Promise<void> {
     await this.refreshFromDisk();
-    new Notice(`「${this.mailNodeLabel}」邮件已完成，环节已推进`, 3000);
+    // 未完成节点均可发邮件：补发/提前发时当前环节可能不前进，文案不写「已推进」
+    new Notice(`「${this.mailNodeLabel}」邮件已完成，时间轴已更新`, 3000);
     this.onChange?.();
   }
 }

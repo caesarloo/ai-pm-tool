@@ -416,6 +416,15 @@ a.ai-pm-pick-name:hover {
   color: var(--text-on-accent);
   cursor: pointer;
 }
+/* 非当前环节的「发起邮件」：未完成节点都可点，但视觉让位于「▶ 当前」环节 */
+.ai-pm-progress .ai-pm-st-btn.ghost {
+  background: transparent;
+  color: var(--text-accent);
+  border-color: var(--text-accent);
+}
+.ai-pm-progress .ai-pm-st-btn.ghost:hover {
+  background: var(--background-modifier-hover);
+}
 /* 进展说明文本框加宽：占满弹窗整行，纵向可拖拽 */
 .ai-pm-progress .ai-pm-progress-ta-row {
   flex-wrap: wrap;
